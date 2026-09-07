@@ -1,44 +1,54 @@
 #pragma once
 
-#include <QJsonObject>
 #include <QObject>
 #include <QStringList>
 #include <QUrl>
 #include <functional>
 #include <memory>
 
+class QNetworkAccessManager;
+class QSaveFile;
+class QTemporaryDir;
+class QCryptographicHash;
+
 namespace precision::update {
-
-enum class UpdateState { Idle, Checking, Available, Downloading, Ready, Installing, Error, Unavailable };
-
+enum class UpdateState { Idle, Checking, Available, Downloading, Ready, AwaitingApproval, Starting, Installing, Installed, Error, Unavailable };
 struct UpdateInfo {
   QString version;
   QUrl notesUrl;
   QUrl packageUrl;
   QString sha256;
-  QString unsignedWarning = QStringLiteral("This update is unsigned and may show an operating-system warning.");
+  QString unsignedWarning = QStringLiteral("This update is unsigned. Package hashes check integrity, not publisher authenticity.");
 };
-
 struct UpdateConfig {
   QString currentVersion;
   QUrl feedUrl;
-  QString applicationDirectory;
   QString stagingDirectory;
   qint64 minimumFreeBytes = 64LL * 1024 * 1024;
 };
-
-struct TransferResult { int status = 0; QUrl finalUrl; QByteArray body; QString error; };
+struct TransferRequest {
+  QUrl url;
+  qint64 maximumBytes = 1024 * 1024;
+  qint64 expectedBytes = -1;
+  int timeoutMs = 30000;
+};
+struct TransferResult { int status = 0; QUrl finalUrl; qint64 bytes = 0; QString error; };
+using TransferSink = std::function<bool(const QByteArray &)>;
 class UpdateTransport {
 public:
   virtual ~UpdateTransport() = default;
-  virtual void get(const QUrl &url, std::function<void(TransferResult)> completed) = 0;
+  virtual void get(const TransferRequest &, TransferSink, std::function<void(TransferResult)>) = 0;
+  virtual void cancel() = 0;
 };
-
 class UpdateProcess {
 public:
   virtual ~UpdateProcess() = default;
-  virtual bool start(const QString &program, const QStringList &arguments, QString *error) = 0;
+  virtual void start(const QString &, const QStringList &, std::function<void()> started,
+                     std::function<void(QString)> completed) = 0;
 };
+// A supplied manager is an explicit test seam and must outlive the transport.
+std::unique_ptr<UpdateTransport> makeQtUpdateTransport(QNetworkAccessManager *testManager = nullptr);
+std::unique_ptr<UpdateProcess> makeQtUpdateProcess();
 
 class UpdateService final : public QObject {
   Q_OBJECT
@@ -54,6 +64,8 @@ public:
   [[nodiscard]] QString availableVersion() const { return m_info.version; }
   [[nodiscard]] UpdateInfo updateInfo() const { return m_info; }
   [[nodiscard]] bool isInstalledSquirrelApplication() const;
+  // Tests simulate an executable location, never an install root. Production uses applicationFilePath().
+  void setExecutablePathForTesting(QString path);
   void setTransport(std::unique_ptr<UpdateTransport> transport);
   void setProcess(std::unique_ptr<UpdateProcess> process);
   Q_INVOKABLE void startupCheck();
@@ -61,33 +73,37 @@ public:
   Q_INVOKABLE void cancel();
   Q_INVOKABLE void retry();
   Q_INVOKABLE void requestInstall();
-  Q_INVOKABLE void approveInstall(bool approved);
-
-  static bool parseMetadata(const QByteArray &json, const UpdateConfig &config, UpdateInfo *info, QString *error);
-  static bool verifyReleases(const QByteArray &releases, const UpdateInfo &info, QString *error);
-  static bool isSafePackageName(const QString &name);
-  static bool isApprovedUrl(const QUrl &candidate, const QUrl &feed);
+  Q_INVOKABLE void approveInstall(const QString &approvalId, bool approved);
+  static bool parseMetadata(const QByteArray &, const UpdateConfig &, UpdateInfo *, QString *);
+  static bool verifyReleases(const QByteArray &, const UpdateInfo &, QString *);
+  static bool isSafePackageName(const QString &);
+  static bool isApprovedUrl(const QUrl &, const QUrl &);
 signals:
   void stateChanged();
   void updateChanged();
-  void restartApprovalRequested();
+  void restartApprovalRequested(const QString &approvalId, const QString &version);
 private:
-  void setState(UpdateState state, QString error = {});
+  void setState(UpdateState, QString error = {});
+  void resetCandidate();
+  void fail(QString error);
   void fetchMetadata();
   void fetchReleases();
   void downloadPackage();
-  void finishPackage(const TransferResult &result);
+  bool validateStaged() const;
+  [[nodiscard]] QString installedRoot() const;
   [[nodiscard]] QString updateExePath() const;
-  [[nodiscard]] QString releasesPath() const;
   UpdateConfig m_config;
+  QString m_testExecutable;
   UpdateState m_state = UpdateState::Idle;
   UpdateInfo m_info;
-  QString m_error;
-  QString m_releaseSha1;
-  QUrl m_verifiedLocalFeed;
-  quint64 m_generation = 0;
+  QString m_error, m_releaseSha1, m_approvalId;
+  QByteArray m_metadata, m_releases, m_localRow;
+  qint64 m_packageBytes = 0, m_receivedBytes = 0;
+  quint64 m_generation = 0, m_approvalGeneration = 0;
+  std::unique_ptr<QTemporaryDir> m_stage;
+  std::unique_ptr<QSaveFile> m_packageFile;
+  std::unique_ptr<QCryptographicHash> m_sha1, m_sha256;
   std::unique_ptr<UpdateTransport> m_transport;
   std::unique_ptr<UpdateProcess> m_process;
 };
-
 } // namespace precision::update
