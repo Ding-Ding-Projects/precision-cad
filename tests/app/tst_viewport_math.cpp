@@ -22,6 +22,16 @@ class ViewportMathTest final : public QObject {
   Q_OBJECT
 
 private slots:
+  void fittedSceneSurvivesPortraitResize() {
+    precision::app::viewport::ViewportCamera camera;
+    camera.setViewport({800,600}); camera.setSceneBounds({-5,-5,-5},{5,5,5});
+    camera.setStandardView(precision::app::viewport::StandardView::Front);
+    camera.setViewport({50,600});
+    const auto edge=camera.project({5,0,5});
+    QVERIFY(edge.x()>=0 && edge.x()<=50);
+    camera.pan(10,15);const auto target=camera.center();camera.setViewport({600,800});
+    QCOMPARE(camera.center(),target);
+  }
   void frontViewCenterRayFacesSceneCenter() {
     precision::app::viewport::ViewportCamera camera;
     camera.setViewport({800.0, 600.0});
