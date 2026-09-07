@@ -44,6 +44,7 @@
 #include <QRegularExpression>
 #include <QHash>
 #include <QSet>
+#include <QCryptographicHash>
 #include <sstream>
 #include <cmath>
 #include <limits>
@@ -116,6 +117,7 @@ QString writeBrep(const TopoDS_Shape& shape) {
 
 TopoDS_Shape operand(const QJsonObject& p, const char* key) { return readBrep(p.value(QLatin1String(key))); }
 QString primitiveEdgeKey(const QString& operation, const TopoDS_Edge& edge, const Bnd_Box& bounds);
+QString brepSha256(const QJsonValue& value) { const auto decoded = QByteArray::fromBase64Encoding(value.toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors); if (decoded.decodingStatus != QByteArray::Base64DecodingStatus::Ok || decoded.decoded.isEmpty()) throw std::runtime_error("invalid_brep"); return QString::fromLatin1(QCryptographicHash::hash(decoded.decoded, QCryptographicHash::Sha256).toHex()); }
 
 TopoDS_Shape makeShape(const QString& operation, const QJsonObject& p) {
   if (operation == "box") {
@@ -154,8 +156,9 @@ TopoDS_Shape makeShape(const QString& operation, const QJsonObject& p) {
   }
   if (operation == "fillet") {
     TopoDS_Shape shape = operand(p, "brep"); double radius; if (!number(p.value("radius"), radius) || radius <= 0) throw std::runtime_error("invalid_radius");
-    const QJsonObject topologyInput = p.value("topologyInput").toObject(); const QString sourceFeatureId = topologyInput.value("sourceFeatureId").toString(); const QJsonArray refs = topologyInput.value("edgeRefs").toArray();
-    if (!uuid(sourceFeatureId) || refs.isEmpty() || refs.size() > kMaxTopologyEdges) throw std::runtime_error("invalid_topology_reference");
+    const QJsonObject topologyInput = p.value("topologyInput").toObject(); const QString sourceFeatureId = topologyInput.value("producerFeatureId").toString(); const QJsonArray refs = topologyInput.value("edgeRefs").toArray();
+    if (topologyInput.isEmpty()) { BRepFilletAPI_MakeFillet builder(shape); for (TopExp_Explorer it(shape, TopAbs_EDGE); it.More(); it.Next()) builder.Add(radius, TopoDS::Edge(it.Current())); builder.Build(); if (!builder.IsDone()) throw std::runtime_error("fillet_failed"); return builder.Shape(); }
+    if (topologyInput.value("version") != QJsonValue(1) || topologyInput.value("mode") != "selectedEdges" || topologyInput.value("producerOperation") != "box" || !uuid(sourceFeatureId) || refs.isEmpty() || refs.size() > kMaxTopologyEdges || topologyInput.value("brepSha256").toString() != brepSha256(p.value("brep"))) throw std::runtime_error("invalid_topology_reference");
     Bnd_Box bounds; BRepBndLib::Add(shape, bounds); QHash<QString, TopoDS_Edge> candidates;
     for (TopExp_Explorer it(shape, TopAbs_EDGE); it.More(); it.Next()) { const TopoDS_Edge edge = TopoDS::Edge(it.Current()); const QString key = primitiveEdgeKey("box", edge, bounds); if (!key.isEmpty()) candidates.insert(key, edge); }
     BRepFilletAPI_MakeFillet builder(shape); QSet<QString> selected;
@@ -219,8 +222,8 @@ QJsonObject describe(const TopoDS_Shape& shape, bool meshRequested, bool topolog
   const double diagonal = std::sqrt((xmax-xmin)*(xmax-xmin) + (ymax-ymin)*(ymax-ymin) + (zmax-zmin)*(zmax-zmin));
   const double deflection = std::clamp(diagonal * 1.0e-3, 1.0e-4, 10.0);
   BRepMesh_IncrementalMesh mesher(shape, deflection, false, 0.5, true); if (!mesher.IsDone()) throw std::runtime_error("tessellation_failed");
-  TopTools_IndexedMapOfShape faces, edges, shapeVertices; TopExp::MapShapes(shape, TopAbs_FACE, faces); TopExp::MapShapes(shape, TopAbs_EDGE, edges); TopExp::MapShapes(shape, TopAbs_VERTEX, shapeVertices);
-  if (shapeVertices.Extent() > kMaxTopologyVertices) throw std::runtime_error("topology_too_large");
+  TopTools_IndexedMapOfShape faces, edges, shapeVertices;
+  if (topologyRequested) { TopExp::MapShapes(shape, TopAbs_FACE, faces); TopExp::MapShapes(shape, TopAbs_EDGE, edges); TopExp::MapShapes(shape, TopAbs_VERTEX, shapeVertices); if (shapeVertices.Extent() > kMaxTopologyVertices) throw std::runtime_error("topology_too_large"); }
   QJsonArray vertices, normals, indices, triangleFaceIds; int offset = 0, triangleCount = 0, faceId = 0;
   for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) { ++faceId; const TopoDS_Face face = TopoDS::Face(it.Current()); TopLoc_Location loc; Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc); if (tri.IsNull() || !tri->HasUVNodes()) throw std::runtime_error("incomplete_tessellation"); BRepAdaptor_Surface surface(face); const gp_Trsf trsf = loc.Transformation(); const bool reversed = face.Orientation() == TopAbs_REVERSED; if (offset + tri->NbNodes() > kMaxMeshVertices || triangleCount + tri->NbTriangles() > kMaxMeshTriangles) throw std::runtime_error("mesh_too_large"); for (int n = 1; n <= tri->NbNodes(); ++n) { gp_Pnt p = tri->Node(n).Transformed(trsf); const gp_Pnt2d uv = tri->UVNode(n); BRepLProp_SLProps properties(surface, uv.X(), uv.Y(), 1, Precision::Confusion()); if (!properties.IsNormalDefined()) throw std::runtime_error("tessellation_normal_failed"); gp_Dir normal = properties.Normal(); if (reversed) normal.Reverse(); vertices.append(p.X()); vertices.append(p.Y()); vertices.append(p.Z()); normals.append(normal.X()); normals.append(normal.Y()); normals.append(normal.Z()); } for (int t = 1; t <= tri->NbTriangles(); ++t) { Poly_Triangle triangle = tri->Triangle(t); int a,b,c; triangle.Get(a,b,c); if (reversed) std::swap(b, c); indices.append(offset+a-1); indices.append(offset+b-1); indices.append(offset+c-1); if (topologyRequested) triangleFaceIds.append(faceId); } offset += tri->NbNodes(); triangleCount += tri->NbTriangles(); }
   const double effectiveRelativeDeflection = diagonal > Precision::Confusion() ? deflection / diagonal : 0.0;
@@ -230,7 +233,7 @@ QJsonObject describe(const TopoDS_Shape& shape, bool meshRequested, bool topolog
   for (int id = 1; id <= shapeVertices.Extent(); ++id) { const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(shapeVertices(id))); entities.append(QJsonObject{{"id", id}, {"source", topologySource(producerFeatureId, "vertex", shapeVertices(id), primitiveVertexKey(operation, p, shapeBounds))}}); topologyVertices.append(QJsonObject{{"vertexId", id}, {"point", topologyPoint(p)}}); }
   for (int id = 1; id <= edges.Extent(); ++id) { const TopoDS_Edge edge = TopoDS::Edge(edges(id)); entities.append(QJsonObject{{"id", id}, {"source", topologySource(producerFeatureId, "edge", edge, primitiveEdgeKey(operation, edge, shapeBounds))}}); TopoDS_Vertex first, last; TopExp::Vertices(edge, first, last); const int firstId = first.IsNull() ? 0 : shapeVertices.FindIndex(first), lastId = last.IsNull() ? 0 : shapeVertices.FindIndex(last); if (firstId <= 0 || lastId <= 0) throw std::runtime_error("topology_incomplete"); BRepAdaptor_Curve curve(edge); const double begin = curve.FirstParameter(), end = curve.LastParameter(); if (!finite(begin) || !finite(end)) throw std::runtime_error("topology_incomplete"); const int sampleCount = std::min(17, kMaxPolylinePoints); QJsonArray points; for (int sample = 0; sample < sampleCount; ++sample) points.append(topologyPoint(curve.Value(begin + (end-begin)*double(sample)/double(sampleCount-1)))); edgePolylines.append(QJsonObject{{"edgeId", id}, {"vertexIds", QJsonArray{firstId,lastId}}, {"points", points}}); }
   for (int id = 1; id <= faces.Extent(); ++id) { const TopoDS_Face face = TopoDS::Face(faces(id)); entities.append(QJsonObject{{"id", id}, {"source", topologySource(producerFeatureId, "face", face, primitiveFaceKey(operation, face, shapeBounds))}}); }
-  result.insert("topology", QJsonObject{{"version", 1}, {"entities", entities}, {"triangleFaceIds", triangleFaceIds}, {"edgePolylines", edgePolylines}, {"vertices", topologyVertices}}); return result;
+  result.insert("topology", QJsonObject{{"version", 1}, {"brepSha256", brepSha256(result.value("brep"))}, {"producer", QJsonObject{{"featureId", producerFeatureId}, {"operation", operation}}}, {"entities", entities}, {"triangleFaceIds", triangleFaceIds}, {"edgePolylines", edgePolylines}, {"vertices", topologyVertices}}); return result;
 }
 } // namespace
 
