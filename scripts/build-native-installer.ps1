@@ -71,9 +71,9 @@ $nuspec = Join-Path $packageRoot 'PrecisionCAD.nuspec'
   </metadata>
 </package>
 "@ | Set-Content -LiteralPath $nuspec -Encoding utf8
-& $nuget pack $nuspec -BasePath $packageRoot -OutputDirectory $output -NoPackageAnalysis -NonInteractive
+& $nuget pack $nuspec -BasePath $packageRoot -OutputDirectory $packageRoot -NoPackageAnalysis -NonInteractive
 if ($LASTEXITCODE -ne 0) { throw 'NuGet package construction failed.' }
-$nupkg = Join-Path $output ("PrecisionCAD.$Version.nupkg")
+$nupkg = Join-Path $packageRoot ("PrecisionCAD.$Version.nupkg")
 if (-not (Test-Path -LiteralPath $nupkg)) { throw 'NuGet package construction did not produce the expected input package.' }
 Push-Location $output
 try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi } finally { Pop-Location }
