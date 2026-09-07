@@ -10,6 +10,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   add_subdirectory("${APP_SOURCE_ROOT}/src/app" app)
 endif()
 find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+qt_add_executable(tst_viewport_math
+  tst_viewport_math.cpp
+  "${APP_SOURCE_ROOT}/src/app/viewport/viewport_camera.cpp"
+  "${APP_SOURCE_ROOT}/src/app/viewport/viewport_picker.cpp")
+target_link_libraries(tst_viewport_math PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+target_include_directories(tst_viewport_math PRIVATE "${APP_SOURCE_ROOT}/src/app")
+add_test(NAME viewport-math COMMAND tst_viewport_math -o "${CMAKE_CURRENT_BINARY_DIR}/viewport-math.txt,txt")
 qt_add_executable(precision_fake_geometry_worker fake_geometry_worker.cpp)
 target_link_libraries(precision_fake_geometry_worker PRIVATE Qt6::Core)
 qt_add_executable(tst_workspace_controller
@@ -26,10 +33,11 @@ set_tests_properties(workspace-controller PROPERTIES ENVIRONMENT_MODIFICATION "P
 
 qt_add_executable(tst_workspace_qml tst_workspace_qml.cpp
  "${APP_SOURCE_ROOT}/src/app/workspace_controller.cpp" "${APP_SOURCE_ROOT}/src/app/workspace_controller.h"
- "${APP_SOURCE_ROOT}/src/app/mesh_canvas.cpp" "${APP_SOURCE_ROOT}/src/app/mesh_canvas.h" "${APP_SOURCE_ROOT}/src/app/ui_text.h")
+ "${APP_SOURCE_ROOT}/src/app/mesh_canvas.cpp" "${APP_SOURCE_ROOT}/src/app/mesh_canvas.h" "${APP_SOURCE_ROOT}/src/app/ui_text.h"
+ "${APP_SOURCE_ROOT}/src/app/viewport/mesh_geometry.cpp" "${APP_SOURCE_ROOT}/src/app/viewport/mesh_geometry.h")
 set_target_properties(tst_workspace_qml PROPERTIES AUTOMOC ON WIN32_EXECUTABLE OFF)
 set_target_properties(tst_workspace_controller precision_fake_geometry_worker PROPERTIES WIN32_EXECUTABLE OFF)
-target_link_libraries(tst_workspace_qml PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Test)
+target_link_libraries(tst_workspace_qml PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Quick3D Qt6::Test)
 target_include_directories(tst_workspace_qml PRIVATE "${APP_SOURCE_ROOT}/src/app")
 target_compile_definitions(tst_workspace_qml PRIVATE MAIN_QML_PATH="${APP_SOURCE_ROOT}/src/app/Main.qml")
 add_test(NAME workspace-qml COMMAND tst_workspace_qml -o "${CMAKE_CURRENT_BINARY_DIR}/workspace-qml.txt,txt")

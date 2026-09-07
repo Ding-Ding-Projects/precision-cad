@@ -10,6 +10,7 @@
 #include "workspace_controller.h"
 #include "ui_text.h"
 #include "mesh_canvas.h"
+#include "viewport/mesh_geometry.h"
 #include "preferences_store.h"
 #include "personal_vocabulary_store.h"
 #include "layout_audit.h"

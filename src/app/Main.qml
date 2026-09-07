@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick3D as Quick3D
 import PrecisionCad
 
 ApplicationWindow {
@@ -135,11 +136,24 @@ ApplicationWindow {
       }
     }
     Pane { SplitView.fillWidth: true
-      MeshCanvas { id: viewport; objectName: "viewport"; backgroundColor: Material.background; foregroundColor: Material.foreground; bodyColor: Material.accent; emptyText: root.copy("No regenerated mesh","尚未生成網格"); anchors.fill: parent; vertices: workspace.meshVertices; indices: workspace.meshIndices
+      MeshCanvas { id: viewport; objectName: "viewport"; anchors.fill: parent; backgroundColor: Material.background; foregroundColor: Material.foreground; bodyColor: Material.accent; emptyText: root.copy("No regenerated mesh","尚未生成網格"); vertices: workspace.meshVertices; indices: workspace.meshIndices; property real cameraDistance: 180; property bool perspective: true
+        function fit() { yaw=-45; pitch=30; cameraDistance=180 }
+        Quick3D.View3D { id: nativeView; anchors.fill: parent; renderMode: Quick3D.View3D.Offscreen; environment: Quick3D.SceneEnvironment { clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
+          camera: viewportCamera
+          Quick3D.PerspectiveCamera { id: viewportCamera; position: Qt.vector3d(0, 0, viewport.cameraDistance); eulerRotation: Qt.vector3d(-viewport.pitch, viewport.yaw, 0); clipNear: 0.1; clipFar: 100000 }
+          Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(-35, -45, 0); brightness: 1.25 }
+          Quick3D.Model {
+            id: meshModel
+            pickable: true
+            geometry: MeshGeometry { vertices: workspace.meshVertices; indices: workspace.meshIndices }
+            materials: Quick3D.PrincipledMaterial { baseColor: Material.accent; roughness: .65; metalness: .15 }
+          }
+        }
+        Label { anchors.centerIn: parent; visible: workspace.meshVertices.length === 0; textFormat: Text.PlainText; text: root.copy("No regenerated mesh","尚未生成網格"); color: Material.foreground }
         MouseArea { anchors.fill: parent; property real lastX; property real lastY; acceptedButtons: Qt.LeftButton | Qt.RightButton
           onPressed: (m)=> {lastX=m.x;lastY=m.y}
-          onPositionChanged: (m)=> { if(pressedButtons & Qt.LeftButton) viewport.orbit((m.x-lastX)*.45,(m.y-lastY)*.45); else if(pressedButtons & Qt.RightButton) viewport.pan(m.x-lastX,m.y-lastY); lastX=m.x;lastY=m.y }
-          onWheel: (w)=> viewport.zoom = viewport.zoom * (w.angleDelta.y > 0 ? 1.12 : .89)
+          onPositionChanged: (m)=> { if(pressedButtons & Qt.LeftButton) { viewport.yaw+=(m.x-lastX)*.45; viewport.pitch=Math.max(-89,Math.min(89,viewport.pitch+(m.y-lastY)*.45)) } lastX=m.x;lastY=m.y }
+          onWheel: (w)=> viewport.cameraDistance=Math.max(1,Math.min(100000,viewport.cameraDistance*(w.angleDelta.y>0?.89:1.12)))
         }
       }
     }
