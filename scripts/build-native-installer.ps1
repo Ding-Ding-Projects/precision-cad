@@ -76,7 +76,7 @@ if ($LASTEXITCODE -ne 0) { throw 'NuGet package construction failed.' }
 $nupkg = Join-Path $output ("PrecisionCAD.$Version.nupkg")
 if (-not (Test-Path -LiteralPath $nupkg)) { throw 'NuGet package construction did not produce the expected input package.' }
 Push-Location $output
-try { & $squirrel --releasify $nupkg --releaseDir $output --no-msi } finally { Pop-Location }
+try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { throw "Squirrel.Windows releasify failed with exit code $LASTEXITCODE." }
 $setup = @(Get-ChildItem -LiteralPath $output -File -Filter 'Setup.exe')
 $releases = @(Get-ChildItem -LiteralPath $output -File -Filter 'RELEASES')
