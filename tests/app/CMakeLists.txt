@@ -34,3 +34,4 @@ target_include_directories(tst_workspace_qml PRIVATE "${APP_SOURCE_ROOT}/src/app
 target_compile_definitions(tst_workspace_qml PRIVATE MAIN_QML_PATH="${APP_SOURCE_ROOT}/src/app/Main.qml")
 add_test(NAME workspace-qml COMMAND tst_workspace_qml -o "${CMAKE_CURRENT_BINARY_DIR}/workspace-qml.txt,txt")
 set_tests_properties(workspace-qml PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+set_tests_properties(workspace-qml PROPERTIES TIMEOUT 30)
