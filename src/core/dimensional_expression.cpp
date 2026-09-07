@@ -6,6 +6,8 @@
 #include <limits>
 #include <numbers>
 
+#include <QSet>
+
 namespace precision::core {
 namespace {
 constexpr int kMaxExponent = 12;
@@ -36,6 +38,19 @@ public:
     EvaluationResult parse() {
         if (m_source.size() > m_limits.maxSourceCharacters)
             return fail("source_too_long", "Expression exceeds the source character limit.", 0, m_source.size());
+        int lexicalTokens = 0;
+        for (int index = 0; index < m_source.size();) {
+            const QChar c = m_source[index];
+            if (c.isSpace()) { ++index; continue; }
+            ++lexicalTokens;
+            if (c.isDigit() || c == u'.') {
+                while (index < m_source.size() && (m_source[index].isDigit() || m_source[index] == u'.')) ++index;
+                if (index < m_source.size() && m_source[index].isLetter()) { ++lexicalTokens; while (index < m_source.size() && m_source[index].isLetter()) ++index; }
+            } else if (c.isLetter() || c == u'_') {
+                while (index < m_source.size() && (m_source[index].isLetterOrNumber() || m_source[index] == u'_')) ++index;
+            } else ++index;
+            if (lexicalTokens > m_limits.maxTokens) return fail("token_limit", "Expression token limit exceeded.", index - 1);
+        }
         skip();
         auto value = expression(0);
         skip();
@@ -59,6 +74,7 @@ private:
         return left;
     }
     std::optional<Quantity> term(int depth) {
+        if (depth > m_limits.maxDepth) return failValue("depth_limit", "Expression nesting limit exceeded.", m_position);
         auto left = unary(depth + 1);
         while (left && !m_failed) {
             skip(); const QChar op = current();
@@ -74,6 +90,7 @@ private:
         return left;
     }
     std::optional<Quantity> unary(int depth) {
+        if (depth > m_limits.maxDepth) return failValue("depth_limit", "Expression nesting limit exceeded.", m_position);
         skip();
         if (current() == u'+' || current() == u'-') { const bool negate = current() == u'-'; ++m_position; if (!consumeOperation()) return {}; auto v = unary(depth + 1); return v && negate ? std::optional<Quantity>(Quantity(-v->value(), v->dimension())) : v; }
         auto left = primary(depth + 1);
@@ -91,8 +108,8 @@ private:
         return left;
     }
     std::optional<Quantity> primary(int depth) {
+        if (depth > m_limits.maxDepth) return failValue("depth_limit", "Expression nesting limit exceeded.", m_position);
         if (++m_nodes > m_limits.maxNodes) return failValue("node_limit", "Expression node limit exceeded.", m_position);
-        if (++m_tokens > m_limits.maxTokens) return failValue("token_limit", "Expression token limit exceeded.", m_position);
         skip(); const int start = m_position;
         if (current() == u'(') { ++m_position; auto value = expression(depth + 1); skip(); if (current() != u')') return failValue("missing_parenthesis", "Expected closing parenthesis.", m_position); ++m_position; return value; }
         if (current().isDigit() || current() == u'.') return number();
@@ -134,7 +151,7 @@ private:
         auto one = [&](const char *fn) -> std::optional<Quantity> { if (args.size() != 1) return failValue("invalid_arity", QString::fromLatin1(fn) + " requires one argument.", start); return args[0]; };
         if (name == u"abs") { auto a = one("abs"); return a ? std::optional<Quantity>(Quantity(std::abs(a->value()), a->dimension())) : std::nullopt; }
         if (name == u"sqrt") { auto a = one("sqrt"); if (!a) return {}; if (a->value() < 0 || a->dimension().lengthExponent % 2 || a->dimension().angleExponent % 2) return failValue("invalid_dimension_function", "sqrt requires nonnegative value and even dimension exponents.", start); return Quantity(std::sqrt(a->value()), {a->dimension().lengthExponent / 2, a->dimension().angleExponent / 2}); }
-        if (name == u"sin" || name == u"cos" || name == u"tan") { auto a = one("trigonometric function"); if (!a) return {}; if (a->dimension() != Dimension::angle()) return failValue("invalid_dimension_function", "Trigonometric functions require an angle.", start); return Quantity(name == u"sin" ? std::sin(a->value()) : name == u"cos" ? std::cos(a->value()) : std::tan(a->value()), Dimension::scalar()); }
+        if (name == u"sin" || name == u"cos" || name == u"tan") { auto a = one("trigonometric function"); if (!a) return {}; if (a->dimension() != Dimension::angle()) return failValue("invalid_dimension_function", "Trigonometric functions require an angle.", start); if (name == u"tan" && std::abs(std::cos(a->value())) <= 1e-12) return failValue("invalid_function_domain", "tan is undefined at odd quarter turns.", start); return Quantity(name == u"sin" ? std::sin(a->value()) : name == u"cos" ? std::cos(a->value()) : std::tan(a->value()), Dimension::scalar()); }
         if (name == u"min" || name == u"max") { if (args.size() != 2) return failValue("invalid_arity", "min and max require two arguments.", start); if (args[0].dimension() != args[1].dimension()) return failValue("incompatible_dimensions", "min and max require matching dimensions.", start); return Quantity(name == u"min" ? std::min(args[0].value(), args[1].value()) : std::max(args[0].value(), args[1].value()), args[0].dimension()); }
         return failValue("unknown_function", "Unknown function.", start, m_position - start);
     }
@@ -146,19 +163,24 @@ private:
     std::optional<Quantity> failValue(QString code, QString message, int offset, int length = 1) { failNow(std::move(code), std::move(message), offset, length); return {}; }
     EvaluationResult fail(QString code, QString message, int offset, int length) { return {std::nullopt, {error(std::move(code), std::move(message), offset, length)}}; }
     void failNow(QString code, QString message, int offset, int length = 1) { if (!m_failed) { m_failed = true; m_diagnostic = error(std::move(code), std::move(message), offset, length); } }
-    QStringView m_source; const NamedQuantities &m_bindings; const ExpressionLimits &m_limits; int m_position = 0, m_nodes = 0, m_tokens = 0, m_operations = 0; bool m_failed = false; ExpressionDiagnostic m_diagnostic;
+    QStringView m_source; const NamedQuantities &m_bindings; const ExpressionLimits &m_limits; int m_position = 0, m_nodes = 0, m_operations = 0; bool m_failed = false; ExpressionDiagnostic m_diagnostic;
 };
 }
 
 Quantity::Quantity(double value, Dimension dimension) : m_value(value), m_dimension(dimension) {}
 
 EvaluationResult DimensionalExpression::evaluate(QStringView expression, const NamedQuantities &bindings, const ExpressionLimits &limits) {
+    if (bindings.size() > limits.maxBindings) return {std::nullopt, {error("binding_limit", "Named binding limit exceeded.", 0)}};
     return Parser(expression, bindings, limits).parse();
 }
 
 EvaluationResult DimensionalExpression::evaluateBindings(const NamedExpressions &expressions, NamedQuantities *out, const NamedQuantities &previous, const ExpressionLimits &limits) {
     if (!out) return {std::nullopt, {error("invalid_output", "Output bindings pointer is required.", 0)}};
-    if (expressions.size() > limits.maxBindings) return {std::nullopt, {error("binding_limit", "Named binding limit exceeded.", 0)}};
+    if (expressions.size() > limits.maxBindings || previous.size() > limits.maxBindings) return {std::nullopt, {error("binding_limit", "Named binding limit exceeded.", 0)}};
+    QSet<QString> allNames;
+    for (auto it = previous.cbegin(); it != previous.cend(); ++it) allNames.insert(it.key());
+    for (auto it = expressions.cbegin(); it != expressions.cend(); ++it) allNames.insert(it.key());
+    if (allNames.size() > limits.maxBindings) return {std::nullopt, {error("binding_limit", "Named binding limit exceeded.", 0)}};
     for (auto it = expressions.cbegin(); it != expressions.cend(); ++it)
         if (!validIdentifier(it.key(), limits)) return {std::nullopt, {error("invalid_identifier", "Invalid named parameter identifier.", 0, it.key().size())}};
     NamedQuantities resolved; QHash<QString, int> states;

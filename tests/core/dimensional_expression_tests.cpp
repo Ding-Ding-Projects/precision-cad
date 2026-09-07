@@ -48,10 +48,17 @@ int main(int argc, char **argv) {
     expect(!DimensionalExpression::evaluate(u"bad", invalidBinding).ok(), "non-finite external quantity must be rejected");
     auto unitNamedBinding = DimensionalExpression::evaluateBindings({{"mm", "2mm"}}, &output);
     expect(unitNamedBinding.ok(), "unit suffix must not create a false cycle");
-    ExpressionLimits tiny; tiny.maxTokens = 1;
-    expect(!DimensionalExpression::evaluate(u"1 + 2", {}, tiny).ok(), "token limit must be enforced");
+    ExpressionLimits tiny; tiny.maxTokens = 1; tiny.maxNodes = 100; tiny.maxOperations = 100; tiny.maxDepth = 100;
+    expect(!DimensionalExpression::evaluate(u"---1", {}, tiny).ok(), "token limit must count operators independently of nodes");
     tiny = {}; tiny.maxOperations = 1;
     expect(!DimensionalExpression::evaluate(u"1 + 2 + 3", {}, tiny).ok(), "operation limit must be enforced");
+    tiny = {}; tiny.maxDepth = 2; tiny.maxTokens = 100; tiny.maxNodes = 100; tiny.maxOperations = 100;
+    expect(!DimensionalExpression::evaluate(u"---1", {}, tiny).ok(), "unary nesting must respect depth limit");
+    tiny = {}; tiny.maxBindings = 1;
+    NamedQuantities tooMany{{"a", Quantity(1, Dimension::scalar())}, {"b", Quantity(2, Dimension::scalar())}};
+    expect(!DimensionalExpression::evaluate(u"a", tooMany, tiny).ok(), "direct bindings must respect binding limit");
+    expect(!DimensionalExpression::evaluate(u"tan(90deg)").ok() && !DimensionalExpression::evaluate(u"tan(270deg)").ok(), "tan odd quarter turns must be rejected");
+    expect(DimensionalExpression::evaluate(u"tan(89deg)").ok(), "tan near but outside singularity remains valid");
 
     QString deep; for (int i = 0; i < 100; ++i) deep += '('; deep += '1'; for (int i = 0; i < 100; ++i) deep += ')';
     expect(!DimensionalExpression::evaluate(deep).ok(), "deep input must be bounded");
