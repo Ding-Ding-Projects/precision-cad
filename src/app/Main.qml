@@ -34,7 +34,9 @@ ApplicationWindow {
   FileDialog { id: saveDialog; title: "Save native Precision CAD document"; fileMode: FileDialog.SaveFile; nameFilters: ["Precision CAD (*.pcad)"]; onAccepted: workspace.save(selectedFile.toLocalFile()) }
   FileDialog { id: openDialog; title: "Open native Precision CAD document"; fileMode: FileDialog.OpenFile; nameFilters: ["Precision CAD (*.pcad)"]; onAccepted: workspace.open(selectedFile.toLocalFile()) }
   Dialog { id: unsavedDialog; title: preferences.dialogEmojis ? "⚠ Unsaved changes" : "Unsaved changes"; modal: true; standardButtons: Dialog.NoButton
-    Column { padding: 20; spacing: 12; Label { text: "Save changes before continuing?" }; Row { spacing: 8
+    Column { padding: 20; spacing: 12
+      Label { text: "Save changes before continuing?" }
+      Row { spacing: 8
       Button { text: "Save"; onClicked: { saveDialog.open(); unsavedDialog.close() } }
       Button { text: "Discard"; onClicked: { var a=root.deferredAction; root.deferredAction=""; unsavedDialog.close(); root.perform(a) } }
       Button { text: "Cancel"; onClicked: { root.deferredAction=""; unsavedDialog.close() } }
@@ -44,11 +46,14 @@ ApplicationWindow {
     Column { anchors.fill: parent; anchors.margins: 18; spacing: 12
       Label { text: "Preferences"; font.pixelSize: 22; font.bold: true }
       ComboBox { model: ["english","cantonese","bilingual"]; currentIndex: model.indexOf(preferences.languageMode); onActivated: preferences.setLanguageMode(currentText) }
-      Label { text: "English tone" }; Slider { from: 0; to: 5; value: preferences.englishTone; onMoved: preferences.setEnglishTone(Math.round(value)) }
-      Label { text: "Cantonese tone" }; Slider { from: 0; to: 5; value: preferences.cantoneseTone; onMoved: preferences.setCantoneseTone(Math.round(value)) }
+       Label { text: "English tone" }
+       Slider { from: 0; to: 5; value: preferences.englishTone; onMoved: preferences.setEnglishTone(Math.round(value)) }
+       Label { text: "Cantonese tone" }
+       Slider { from: 0; to: 5; value: preferences.cantoneseTone; onMoved: preferences.setCantoneseTone(Math.round(value)) }
       Switch { text: "Dialog emoji"; checked: preferences.dialogEmojis; onToggled: preferences.setDialogEmojis(checked) }
       ComboBox { model:["dark","light","system"]; currentIndex:model.indexOf(preferences.theme); onActivated: preferences.setTheme(currentText) }
-      Label { text: "Font scale" }; Slider { from:.8; to:1.5; value:preferences.fontScale; onMoved: preferences.setFontScale(value) }
+       Label { text: "Font scale" }
+       Slider { from:.8; to:1.5; value:preferences.fontScale; onMoved: preferences.setFontScale(value) }
       Switch { text:"Reduced motion"; checked:preferences.reducedMotion; onToggled:preferences.setReducedMotion(checked) }
       Switch { text:"ADHD mode"; checked:preferences.adhdMode; onToggled:preferences.setAdhdMode(checked) }
       Label { text: "Narration is stored but unavailable until a local voice runtime is integrated."; wrapMode: Text.WordWrap }
@@ -118,6 +123,13 @@ ApplicationWindow {
   }
   Dialog { id: dimensionsDialog; title: "Edit dimensions"; modal: true; standardButtons: Dialog.Ok | Dialog.Cancel
     onAccepted: workspace.updateDimensions(root.selectedLeft, Number(dimA.text), Number(dimB.text), Number(dimC.text))
-    Grid { columns:2; padding:16; spacing:8; Label{text:"First"}; TextField{id:dimA;text:"10"}; Label{text:"Second"};TextField{id:dimB;text:"10"};Label{text:"Third (box)"};TextField{id:dimC;text:"10"} }
+    Grid { columns:2; padding:16; spacing:8
+      Label { text:"First" }
+      TextField { id:dimA; text:"10" }
+      Label { text:"Second" }
+      TextField { id:dimB; text:"10" }
+      Label { text:"Third (box)" }
+      TextField { id:dimC; text:"10" }
+    }
   }
 }
