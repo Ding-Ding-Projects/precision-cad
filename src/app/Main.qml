@@ -18,6 +18,7 @@ ApplicationWindow {
   property string vocabularyStatus: ""
   property string selectedLeft: ""; property string selectedRight: ""
   property string deferredAction: ""
+  property url documentFolder: typeof initialDocumentFolder === "undefined" ? "" : initialDocumentFolder
   function copy(en, yue) {
     var english = en
     var cantonese = yue
@@ -50,9 +51,9 @@ ApplicationWindow {
       Button { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
-  FileDialog { id: saveDialog; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
-  FileDialog { id: openDialog; title: root.copy("Open native Precision CAD document","開啟原生精準 CAD 文件"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.open(workspace.localPath(selectedFile)) }
-  FileDialog { id: vocabularyDialog; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
+  FileDialog { id: saveDialog; currentFolder: root.documentFolder; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
+  FileDialog { id: openDialog; currentFolder: root.documentFolder; title: root.copy("Open native Precision CAD document","開啟原生精準 CAD 文件"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.open(workspace.localPath(selectedFile)) }
+  FileDialog { id: vocabularyDialog; currentFolder: root.documentFolder; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
   Connections { target: workspace
     function onSaveFinished(ok, message) { var next=root.saveForDeferred ? root.deferredAction : ""; root.deferredAction=""; root.saveForDeferred=false; if(ok && next!=="") root.perform(next) }
   }
@@ -141,14 +142,14 @@ ApplicationWindow {
       Column { anchors.fill: parent; spacing: 10
         Label { textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18 }
         Label { textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
-        Label { visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
+        Label { objectName: "rawDiagnostics"; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
         Button { text: root.copy("Cancel geometry","取消幾何運算"); enabled: workspace.busy; onClicked: workspace.cancel() }
         Label { textFormat: Text.PlainText; text: root.copy("Measurements","量度"); font.bold: true; font.pixelSize: 18 }
         Label { textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
         Label { textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
         Label { textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
-        Label { textFormat: Text.PlainText; text: root.copy("CAM, FEA, fillet editing, native preferences, and full history are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+        Label { textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
   }

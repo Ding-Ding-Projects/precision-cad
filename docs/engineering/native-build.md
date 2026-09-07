@@ -13,3 +13,9 @@ Open CASCADE 8.0.1 and its supporting archive are acquired automatically from of
 Qt 6.8.3 and MSVC are discovered from supported local installation/cache routes. Their fully automatic fresh-machine acquisition, cache-content integrity inventory, concurrent activation journal, and final runtime bundling are not implemented by this initial route. Missing tools fail with an explicit message; the script does not modify unrelated toolchains.
 
 The desktop installer is not implemented yet. A successful native development build is not evidence of an unsigned Squirrel.Windows package or an installed application.
+
+## Development runtime staging
+
+After a successful committed-source build, `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-native-runtime.ps1` deploys the Qt imports detected from the real QML source and recursively resolves the actual application and geometry-worker DLL imports. The pinned release TBB and jemalloc directories are included; debug support binaries are not selected. The helper records application and worker hashes in `build/native/runtime-receipt.json` and refuses a changed source revision.
+
+This is an unpacked development runtime, not an installer. Native captures use `--profile-directory` with an isolated directory. That mode also initializes file dialogs in its own empty `documents` folder to avoid showing unrelated user files during verification. The front-screen build time is rendered locally with seconds and its timezone, from recorded build provenance.

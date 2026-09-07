@@ -4,6 +4,8 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
+#include <QDateTime>
+#include <QStandardPaths>
 #include "workspace_controller.h"
 #include "ui_text.h"
 #include "mesh_canvas.h"
@@ -17,5 +19,10 @@ int main(int argc, char *argv[]) {
   if(parser.isSet("geometry-worker")) { const QFileInfo worker(parser.value("geometry-worker")); if(!worker.isAbsolute() || !worker.isExecutable()) return 2; qputenv("PRECISION_GEOMETRY_WORKER", worker.absoluteFilePath().toUtf8()); }
   qmlRegisterType<MeshCanvas>("PrecisionCad", 1, 0, "MeshCanvas"); WorkspaceController workspace; const QString preferencesPath=profile.isEmpty()?QString():profile+"/preferences.json"; precision::preferences::PreferencesStore preferences(preferencesPath, &app); precision::preferences::PersonalVocabularyStore vocabulary(profile.isEmpty()?QString():profile+"/vocabulary.json", &app);
   UiText uiText(&preferences,&vocabulary,&app); QQmlApplicationEngine engine; engine.rootContext()->setContextProperty("uiText", &uiText); engine.rootContext()->setContextProperty("workspace", &workspace); engine.rootContext()->setContextProperty("preferences", &preferences); engine.rootContext()->setContextProperty("vocabulary", &vocabulary); engine.rootContext()->setContextProperty("buildVersion", QStringLiteral(PRECISION_CAD_VERSION)); engine.rootContext()->setContextProperty("buildTime", QStringLiteral(PRECISION_CAD_BUILD_TIME));
+  const QDateTime recordedBuild = QDateTime::fromString(QStringLiteral(PRECISION_CAD_BUILD_TIME), Qt::ISODate);
+  engine.rootContext()->setContextProperty("buildTime", recordedBuild.isValid() ? recordedBuild.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss t")) : QStringLiteral("Unavailable"));
+  const QString documentFolder = profile.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) : QDir(profile).filePath(QStringLiteral("documents"));
+  if (!profile.isEmpty() && !QDir().mkpath(documentFolder)) return 2;
+  engine.rootContext()->setContextProperty("initialDocumentFolder", QUrl::fromLocalFile(documentFolder));
   engine.loadFromModule("PrecisionCad", "Main"); if(engine.rootObjects().isEmpty()) return 1; return app.exec();
 }
