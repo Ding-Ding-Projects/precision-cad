@@ -22,7 +22,7 @@ export const approvedCapabilityMembers=Object.freeze({
  analysis:['MATERIAL','LOAD','RESTRAINT','MESH','STATIC','MODAL','RESULTS','REVISION','CONVERGENCE'],
  command:['API','DISCOVERY','DIAGNOSTICS','BATCH','SCRIPT_CLIENT']
 });
-requiredCapabilityIds=Object.freeze([...requiredCapabilityIds,...Object.entries(approvedCapabilityMembers).flatMap(([group,members])=>members.map(member=>`CAD-${group.toUpperCase()}-${member}-001`))]);
+requiredCapabilityIds=Object.freeze([...new Set([...requiredCapabilityIds,...Object.entries(approvedCapabilityMembers).flatMap(([group,members])=>members.map(member=>`CAD-${group.toUpperCase()}-${member}-001`))])]);
 const hash=value=>createHash('sha256').update(value).digest('hex'); const h64=/^[0-9a-f]{64}$/u;
 const file=(root,path,expected,label,errors)=>{if(typeof path!=='string'||isAbsolute(path)){errors.push(`Unsafe ${label} path`);return null;}const full=resolve(root,path);if(relative(root,full).startsWith('..')||!existsSync(full)){errors.push(`Missing ${label}`);return null;}if(!h64.test(expected||'')||hash(readFileSync(full))!==expected)errors.push(`Hash mismatch for ${label}`);return full;};
 const git=(root,args)=>{try{return execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();}catch{return null;}};
