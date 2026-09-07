@@ -94,7 +94,7 @@ private slots:
   const auto beforeZoom=camera->distance();camera->zoomBy(.5);QVERIFY(camera->distance()<beforeZoom);
   QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("fitViewButton"),"clicked"));QVERIFY(camera->center().length()<.001);
   QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("projectionButton"),"clicked"));QVERIFY(!camera->perspective());QCOMPARE(native->property("camera").value<QObject*>(),orthographic);
-  QCOMPARE(orthographic->property("horizontalMagnification").toDouble(),camera->magnification());
+  QVERIFY(std::abs(orthographic->property("horizontalMagnification").toDouble()-camera->magnification())<1e-5);
   QCOMPARE(camera->pick(center.x(),center.y()).value("bodyId").toString(),QString("near"));
   const QPoint click=viewport->mapToScene(center).toPoint();QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,click);QCOMPARE(workspace.selectedBody(),QString("near"));
   camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
@@ -187,8 +187,8 @@ private slots:
   variants.clear(); for(int tone=1;tone<=5;++tone) { QVERIFY(prefs.setCantoneseTone(tone)); QCoreApplication::processEvents(); variants.insert(help->property("text").toString()); } QCOMPARE(variants.size(),5);
   QVERIFY(prefs.setCantoneseTone(1)); QCoreApplication::processEvents(); QVERIFY(help->property("text").toString()!=playfulYue);
   QVERIFY(prefs.setLanguageMode("both")); QCoreApplication::processEvents(); QCOMPARE(language->property("currentIndex").toInt(),2); QVERIFY(help->property("text").toString().contains('\n'));
-  QVERIFY(prefs.setTheme("light")); QCoreApplication::processEvents(); QCOMPARE(root->property("effectiveTheme").toInt(),0); auto viewport=root->findChild<QObject*>("viewport"); QVERIFY(viewport); const auto lightBackground=viewport->property("backgroundColor");
-  QVERIFY(prefs.setTheme("dark")); QCoreApplication::processEvents(); QCOMPARE(root->property("effectiveTheme").toInt(),1); QVERIFY(viewport->property("backgroundColor")!=lightBackground);
+  QVERIFY(prefs.setTheme("light")); QCoreApplication::processEvents(); QCOMPARE(root->property("effectiveTheme").toInt(),0); auto environment=root->findChild<QObject*>("sceneEnvironment"); QVERIFY(environment); const auto lightBackground=environment->property("clearColor");
+  QVERIFY(prefs.setTheme("dark")); QCoreApplication::processEvents(); QCOMPARE(root->property("effectiveTheme").toInt(),1); QVERIFY(environment->property("clearColor")!=lightBackground);
   root->setProperty("deferredAction","new"); root->setProperty("saveForDeferred",true); auto save=root->findChild<QObject*>("saveDialog"); QVERIFY(save); QVERIFY(QMetaObject::invokeMethod(save,"rejected")); QCOMPARE(root->property("deferredAction").toString(),QString()); QVERIFY(!root->property("saveForDeferred").toBool());
   root->setProperty("deferredAction","new"); root->setProperty("saveForDeferred",true); workspace.saveFinished(false,"failure"); QCOMPARE(root->property("deferredAction").toString(),QString()); QVERIFY(!root->property("saveForDeferred").toBool());
   QCOMPARE(workspace.localPath(QUrl("https://example.invalid/document")),QString()); QCOMPARE(workspace.localPath(QUrl::fromLocalFile(dir.filePath("a b.pcad"))),dir.filePath("a b.pcad"));

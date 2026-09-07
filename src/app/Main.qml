@@ -51,10 +51,6 @@ ApplicationWindow {
       ToolButton { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
       ToolButton { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
       ToolButton { objectName: "fitViewButton"; text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
-      ToolButton { objectName: "projectionButton"; text: cameraState.perspective ? root.copy("Orthographic", "正投影") : root.copy("Perspective", "透視"); onClicked: cameraState.perspective=!cameraState.perspective }
-      Repeater { model: [root.copy("Iso","等角"),root.copy("Front","前"),root.copy("Back","後"),root.copy("Left","左"),root.copy("Right","右"),root.copy("Top","頂"),root.copy("Bottom","底")]
-        ToolButton { required property int index; required property string modelData; objectName: "standardView"+index; text: modelData; onClicked: cameraState.standardView(index) }
-      }
       ToolButton { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
       ToolButton { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
       ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
@@ -148,7 +144,7 @@ ApplicationWindow {
         ViewportCamera { id: cameraState; objectName: "cameraController"; viewportSize: Qt.size(viewport.width, viewport.height); geometry: sceneMesh }
         Quick3D.View3D { id: nativeView; objectName: "nativeView"; anchors.fill: parent
           renderMode: Quick3D.View3D.Offscreen
-          environment: Quick3D.SceneEnvironment { clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; depthTestEnabled: true; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
+          environment: Quick3D.SceneEnvironment { objectName: "sceneEnvironment"; clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; depthTestEnabled: true; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
           camera: cameraState.perspective ? perspectiveCamera : orthographicCamera
           Quick3D.PerspectiveCamera { id: perspectiveCamera; objectName: "perspectiveCamera"; position: cameraState.position; rotation: cameraState.orientation; fieldOfView: cameraState.fieldOfView; fieldOfViewOrientation: Quick3D.PerspectiveCamera.Vertical; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
           Quick3D.OrthographicCamera { id: orthographicCamera; objectName: "orthographicCamera"; position: cameraState.position; rotation: cameraState.orientation; horizontalMagnification: cameraState.magnification; verticalMagnification: cameraState.magnification; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
@@ -173,6 +169,12 @@ ApplicationWindow {
           onReleased: (m)=> { if(!dragged && m.button===Qt.LeftButton) { var hit=cameraState.pick(m.x,m.y); if(hit.bodyId)workspace.selectBody(hit.bodyId) } }
           onDoubleClicked: viewport.fit()
           onWheel: (w)=> { cameraState.zoomBy(Math.exp(-w.angleDelta.y*.001)); w.accepted=true }
+        }
+        Flow { objectName: "viewControls"; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: 4
+      ToolButton { objectName: "projectionButton"; text: cameraState.perspective ? root.copy("Orthographic", "正投影") : root.copy("Perspective", "透視"); onClicked: cameraState.perspective=!cameraState.perspective }
+      Repeater { model: [root.copy("Iso","等角"),root.copy("Front","前"),root.copy("Back","後"),root.copy("Left","左"),root.copy("Right","右"),root.copy("Top","頂"),root.copy("Bottom","底")]
+        ToolButton { required property int index; required property string modelData; objectName: "standardView"+index; text: modelData; onClicked: cameraState.standardView(index) }
+      }
         }
       }
     }
