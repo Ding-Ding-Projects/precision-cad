@@ -38,6 +38,7 @@ endif()
 
 add_library(precision_sketch STATIC
   sketch_model.cpp
+  sketch_profiles.cpp
   "${PRECISION_SOLVESPACE_SOURCE}/src/slvs/lib.cpp"
   "${PRECISION_SOLVESPACE_SOURCE}/src/constrainteq.cpp"
   "${PRECISION_SOLVESPACE_SOURCE}/src/entity.cpp"
