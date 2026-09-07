@@ -43,8 +43,8 @@ private slots:
   QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH))); QVERIFY2(component.isReady(),qPrintable(component.errorString()));
   std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
   auto *window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window);
-  auto *toolbar=root->findChild<QQuickItem*>("mainToolbar"); auto *flow=root->findChild<QQuickItem*>("toolbarFlow"); auto *workspaceSplit=root->findChild<QQuickItem*>("workspaceSplit"); auto *inspector=root->findChild<QQuickItem*>("inspectorColumn"); auto *notice=root->findChild<QQuickItem*>("inspectorNotice");
-  QVERIFY(toolbar); QVERIFY(flow); QVERIFY(workspaceSplit); QVERIFY(inspector); QVERIFY(notice);
+  auto *toolbar=root->findChild<QQuickItem*>("mainToolbar"); auto *flow=root->findChild<QQuickItem*>("toolbarFlow"); auto *workspaceSplit=root->findChild<QQuickItem*>("workspaceSplit"); auto *modelColumn=root->findChild<QQuickItem*>("modelColumn"); auto *help=root->findChild<QQuickItem*>("selectionHelp"); auto *inspectorScroll=root->findChild<QQuickItem*>("inspectorScroll"); auto *inspector=root->findChild<QQuickItem*>("inspectorColumn"); auto *version=root->findChild<QQuickItem*>("versionInfo"); auto *notice=root->findChild<QQuickItem*>("inspectorNotice");
+  QVERIFY(toolbar); QVERIFY(flow); QVERIFY(workspaceSplit); QVERIFY(modelColumn); QVERIFY(help); QVERIFY(inspectorScroll); QVERIFY(inspector); QVERIFY(version); QVERIFY(notice);
   const QList<QSize> sizes{{1280, 820}, {1024, 700}, {800, 600}};
   const QStringList languages{"en", "yue", "both"};
   const QStringList themes{"light", "dark"};
@@ -52,10 +52,30 @@ private slots:
    QVERIFY(prefs.setLanguageMode(language)); QVERIFY(prefs.setTheme(theme)); window->resize(size); window->show(); QCoreApplication::processEvents(); QCoreApplication::processEvents();
    QVERIFY2(qAbs(toolbar->height()-flow->implicitHeight()) < 0.1, "toolbar height must match the visible Flow height");
    QVERIFY2(qAbs(workspaceSplit->y()-toolbar->height()) < 0.1, "workspace must begin below the toolbar");
-   QVERIFY2(workspaceSplit->height() >= 0, "workspace must retain a non-negative height");
+   QVERIFY2(workspaceSplit->height() >= 400, "supported minimum must retain a usable workspace height");
+   const QRectF toolbarRect=toolbar->mapRectToScene(toolbar->boundingRect());
+   QCOMPARE(flow->childItems().size(), 13);
+   for (auto *control : flow->childItems()) { const QRectF controlRect=control->mapRectToScene(control->boundingRect()); QVERIFY2(controlRect.top() >= toolbarRect.top()-0.1 && controlRect.bottom() <= toolbarRect.bottom()+0.1, "every toolbar control must remain inside the measured toolbar"); }
    QVERIFY2(inspector->childrenRect().width() <= inspector->width()+0.1, "inspector children must stay within their constrained column");
    QVERIFY2(notice->width() <= inspector->width()+0.1, "long inspector notice must wrap inside the pane");
+   QVERIFY2(help->mapRectToScene(help->boundingRect()).bottom() <= modelColumn->mapRectToScene(modelColumn->boundingRect()).bottom()+0.1, "model selection help must remain reachable at the model-pane bottom");
   }
+  QVERIFY(prefs.setLanguageMode("both")); QVERIFY(prefs.setEnglishTone(5)); QVERIFY(prefs.setCantoneseTone(5)); QVERIFY(prefs.setFontScale(1.5)); QVERIFY(prefs.setTheme("dark")); window->resize(800,600); QCoreApplication::processEvents(); QCoreApplication::processEvents();
+  const QRectF scrollRect=inspectorScroll->mapRectToScene(inspectorScroll->boundingRect());
+  QVERIFY2(version->mapRectToScene(version->boundingRect()).intersects(scrollRect), "version provenance must be initially visible at the constrained minimum");
+  inspectorScroll->setProperty("contentY", inspectorScroll->property("contentHeight").toReal()-inspectorScroll->height()); QCoreApplication::processEvents();
+  QVERIFY2(notice->mapRectToScene(notice->boundingRect()).bottom() <= scrollRect.bottom()+0.1, "scrolling to the inspector bottom must reach the final notice");
+ }
+ void legacyGeometryFixturesFail() {
+  QQmlEngine engine;
+  QQmlComponent toolbarFixture(&engine); toolbarFixture.setData("import QtQuick; Item { width: 800; height: 600; Item { objectName: \"legacyToolbar\"; height: 16; Item { objectName: \"legacyFlow\"; implicitHeight: 128; width: 800; height: 128 } } }", QUrl());
+  std::unique_ptr<QObject> toolbarRoot(toolbarFixture.create()); QVERIFY(toolbarRoot);
+  auto *legacyToolbar=toolbarRoot->findChild<QQuickItem*>("legacyToolbar"); auto *legacyFlow=toolbarRoot->findChild<QQuickItem*>("legacyFlow"); QVERIFY(legacyToolbar); QVERIFY(legacyFlow);
+  QEXPECT_FAIL("", "The old toolbar fixture must fail the measured height contract.", Continue); QVERIFY(qAbs(legacyToolbar->height()-legacyFlow->implicitHeight()) < 0.1);
+  QQmlComponent inspectorFixture(&engine); inspectorFixture.setData("import QtQuick; Item { width: 200; height: 100; Column { objectName: \"legacyColumn\"; Repeater { model: 10; delegate: Rectangle { width: 200; height: 20 } } } }", QUrl());
+  std::unique_ptr<QObject> inspectorRoot(inspectorFixture.create()); QVERIFY(inspectorRoot);
+  auto *legacyColumn=inspectorRoot->findChild<QQuickItem*>("legacyColumn"); QVERIFY(legacyColumn);
+  QEXPECT_FAIL("", "The old non-scrollable inspector fixture must fail its reachable-content contract.", Continue); QVERIFY(legacyColumn->childrenRect().height() <= 100);
  }
 };
 int main(int argc,char **argv) { qputenv("QT_QPA_PLATFORM","offscreen"); qputenv("QT_QUICK_CONTROLS_STYLE","Material"); QGuiApplication app(argc,argv); qmlRegisterType<MeshCanvas>("PrecisionCad",1,0,"MeshCanvas"); WorkspaceQmlTest test; return QTest::qExec(&test,argc,argv); }

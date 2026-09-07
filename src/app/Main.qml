@@ -140,7 +140,8 @@ ApplicationWindow {
       }
     }
     Pane { objectName: "inspectorPane"; SplitView.preferredWidth: 290
-      Column { objectName: "inspectorColumn"; anchors.fill: parent; spacing: 10; clip: true
+      ScrollView { id: inspectorScroll; objectName: "inspectorScroll"; anchors.fill: parent; contentWidth: availableWidth
+      Column { objectName: "inspectorColumn"; width: inspectorScroll.availableWidth; spacing: 10
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18; wrapMode: Text.WordWrap }
         Label { width: parent.width; textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
         Label { objectName: "rawDiagnostics"; width: parent.width; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
@@ -149,8 +150,9 @@ ApplicationWindow {
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
-        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
+        Label { objectName: "versionInfo"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
         Label { objectName: "inspectorNotice"; width: parent.width; textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+      }
       }
     }
   }
