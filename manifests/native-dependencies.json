@@ -13,6 +13,7 @@
     "root": "opencascade-8.0.1-vc14-64"
   },
   "occtSupport": {
+    "requiredRuntimeDlls": ["tbb-2021.13.0-x64/bin/tbb12.dll", "jemalloc-vc14-64/bin/jemalloc.dll"],
     "archiveUrl": "https://github.com/Open-Cascade-SAS/OCCT/releases/download/V8.0.1/3rdparty-vc14-64.zip",
     "sha256": "12d04f688c583b8e896758f65cd7012458fee921cedb792ec6caaf469b372598",
     "archiveName": "3rdparty-vc14-64.zip",

@@ -1,4 +1,4 @@
-param([switch]$Test, [switch]$ConfigureOnly, [string]$QtRoot, [string]$BuildToolsRoot)
+param([switch]$Test, [switch]$ConfigureOnly, [string]$TestFilter, [string]$QtRoot, [string]$BuildToolsRoot)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $manifest = Get-Content (Join-Path $root 'manifests/native-dependencies.json') -Raw | ConvertFrom-Json
@@ -54,7 +54,13 @@ foreach ($line in $environmentLines) {
 $cmake = (Get-Command cmake -ErrorAction Stop).Source
 $nativeBuild = Join-Path $root 'build/native'
 $occtBin = Join-Path $occtRoot 'win64/vc14/bin'
-$supportBins = @(Get-ChildItem $support -Recurse -Filter tbb12.dll | ForEach-Object DirectoryName)
+$supportBins = @()
+foreach ($requiredDll in $manifest.occtSupport.requiredRuntimeDlls) {
+    $runtime = Join-Path (Join-Path $support $manifest.occtSupport.root) $requiredDll
+    if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) { throw "Missing pinned supporting runtime: $requiredDll." }
+    $supportBins += Split-Path -Parent $runtime
+}
+$supportBins = @($supportBins | Select-Object -Unique)
 $env:PATH = ((@((Join-Path $QtRoot 'bin'),$occtBin) + $supportBins + @($env:PATH)) -join ';')
 & $cmake -S $root -B $nativeBuild -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$QtRoot" "-DOpenCASCADE_DIR=$occtRoot/cmake" -DBUILD_TESTING=ON
 if ($LASTEXITCODE -ne 0) { throw 'Native CMake configuration failed.' }
@@ -62,7 +68,9 @@ if ($ConfigureOnly) { return }
 & $cmake --build $nativeBuild --parallel 4
 if ($LASTEXITCODE -ne 0) { throw 'Native build failed.' }
 if ($Test) {
-    & (Join-Path (Split-Path $cmake) 'ctest.exe') --test-dir $nativeBuild --output-on-failure
+    $testArguments = @('--test-dir',$nativeBuild,'--output-on-failure')
+    if ($TestFilter) { $testArguments += @('-R',$TestFilter) }
+    & (Join-Path (Split-Path $cmake) 'ctest.exe') @testArguments
     if ($LASTEXITCODE -ne 0) { throw 'Native local tests failed.' }
 }
 Write-Output "Native build completed: $nativeBuild"
