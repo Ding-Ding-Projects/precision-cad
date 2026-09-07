@@ -3,8 +3,8 @@ param([string]$AuditPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 function Validate([object[]]$Records) {
-  $started=@($Records|Where-Object kind -eq 'started'); $ready=@($Records|Where-Object kind -eq 'ready'); $beats=@($Records|Where-Object kind -eq 'heartbeat'); $events=@($Records|Where-Object kind -eq 'process-start'); $terminal=@($Records|Where-Object kind -eq 'terminal')
-  if($started.Count -ne 1 -or $ready.Count -ne 1 -or $beats.Count -lt 1 -or $events.Count -lt 1 -or $terminal.Count -ne 1 -or -not $terminal[0].healthy){throw 'audit coverage facts are incomplete'}
+  $started=@($Records|Where-Object kind -eq 'started'); $ready=@($Records|Where-Object kind -eq 'ready'); $beats=@($Records|Where-Object kind -eq 'heartbeat'); $events=@($Records|Where-Object kind -eq 'process-start'); $samples=@($Records|Where-Object kind -eq 'sample'); $terminal=@($Records|Where-Object kind -eq 'terminal')
+  if($started.Count -ne 1 -or $ready.Count -ne 1 -or $beats.Count -lt 1 -or (($events.Count + $samples.Count) -lt 1) -or $terminal.Count -ne 1 -or -not $terminal[0].healthy){throw 'audit coverage facts are incomplete'}
   $previous=[DateTimeOffset]::MinValue; foreach($record in $Records){$at=[DateTimeOffset]::Parse($record.at); if($at -lt $previous -or ($previous -ne [DateTimeOffset]::MinValue -and ($at-$previous).TotalSeconds -gt 5)){throw 'audit timeline is invalid'};$previous=$at}
 }
 $now=[DateTimeOffset]::UtcNow
