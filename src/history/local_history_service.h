@@ -15,7 +15,7 @@ struct BranchInfo { QString name; QString id; bool current = false; };
 struct CommitAuthor { QString name; QString email; };
 struct SemanticChange { QString path; QString kind; QString detail; };
 struct SemanticDiff { bool comparable = false; QVector<SemanticChange> changes; HistoryError error; };
-struct RestorePreview { bool valid = false; QString sourceRevision; QString relativePath; QString preservedCopy; qint64 bytes = 0; HistoryError error; };
+struct RestorePreview { bool valid = false; QString sourceRevision; QString relativePath; QString preservedCopy; QByteArray currentSha256; QByteArray historicalSha256; qint64 bytes = 0; HistoryError error; };
 
 class LocalHistoryService final : public QObject {
     Q_OBJECT

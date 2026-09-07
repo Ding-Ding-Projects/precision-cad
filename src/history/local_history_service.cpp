@@ -1,6 +1,7 @@
 #include "history/local_history_service.h"
 
 #include <QDir>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -8,6 +9,8 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QLockFile>
+#include <QUuid>
 
 namespace precision::history {
 namespace {
@@ -112,10 +115,12 @@ bool LocalHistoryService::validSelectedPath(const QString &relativePath, QString
     const QString clean = QDir::cleanPath(relativePath);
     const QString full = QDir(m_root).absoluteFilePath(clean);
     QFileInfo file(full);
-    if (!isNativeDocument(clean) || file.isSymLink() || !file.exists() || !file.isFile() || file.size() > kMaximumDocumentBytes || QFileInfo(file.canonicalFilePath()).dir().canonicalPath().isEmpty() || !file.canonicalFilePath().startsWith(m_root + QDir::separator())) {
+    const QString canonical = file.canonicalFilePath();
+    const QString withinRoot = QDir(m_root).relativeFilePath(canonical);
+    if (!isNativeDocument(clean) || file.isSymLink() || !file.exists() || !file.isFile() || file.size() > kMaximumDocumentBytes || canonical.isEmpty() || QDir::isAbsolutePath(withinRoot) || withinRoot == QStringLiteral("..") || withinRoot.startsWith(QStringLiteral("../")) || withinRoot.startsWith(QStringLiteral("..\\"))) {
         setError(error, QStringLiteral("unsupported-path"), QStringLiteral("Select an existing native model file inside this project.")); return false;
     }
-    if (absolutePath) *absolutePath = file.canonicalFilePath(); return true;
+    if (absolutePath) *absolutePath = canonical; return true;
 }
 
 bool LocalHistoryService::validateDocument(const QByteArray &bytes, HistoryError *error) const {
@@ -124,7 +129,7 @@ bool LocalHistoryService::validateDocument(const QByteArray &bytes, HistoryError
     if (parse.error != QJsonParseError::NoError || !doc.isObject()) { setError(error, QStringLiteral("invalid-document-json"), QStringLiteral("The historical native document is not valid JSON.")); return false; }
     const QJsonObject object = doc.object();
     const auto validString = [&object](const char *key) { return object.value(QLatin1String(key)).isString() && !object.value(QLatin1String(key)).toString().isEmpty(); };
-    if (!object.value(QStringLiteral("schemaVersion")).isDouble() || !validString("documentId") || !object.value(QStringLiteral("revision")).isDouble() || !validString("units") || !object.value(QStringLiteral("features")).isArray()) {
+    if (!object.value(QStringLiteral("schemaVersion")).isDouble() || object.value(QStringLiteral("schemaVersion")).toInt() < 1 || !validString("documentId") || !object.value(QStringLiteral("revision")).isDouble() || object.value(QStringLiteral("revision")).toDouble() < 0 || !validString("units") || !object.value(QStringLiteral("features")).isArray()) {
         setError(error, QStringLiteral("invalid-native-schema"), QStringLiteral("The historical file does not satisfy the native document record boundary.")); return false;
     }
     return true;
@@ -183,20 +188,35 @@ RestorePreview LocalHistoryService::previewRestore(const QString &revision, cons
     if (!initialized(&error) || !validSelectedPath(relativePath, &current, &error)) { preview.error = error; return preview; }
     auto verify = git({QStringLiteral("-C"), m_root, QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("--quiet"), revision + QStringLiteral("^{commit}")});
     if (verify.exitCode != 0 || verify.timedOut) { preview.error = {QStringLiteral("invalid-revision"), QStringLiteral("Choose an existing commit revision.")}; return preview; }
+    QFile active(current); if (!active.open(QIODevice::ReadOnly)) { preview.error = {QStringLiteral("current-read-failed"), QStringLiteral("The current native document could not be read for restore protection.")}; return preview; }
+    const QByteArray activeBytes = active.readAll();
+    if (!validateDocument(activeBytes, &error)) { preview.error = error; return preview; }
     auto historical = git({QStringLiteral("-C"), m_root, QStringLiteral("show"), revision + QStringLiteral(":") + relativePath});
     if (historical.exitCode != 0 || historical.timedOut || !validateDocument(historical.output, &error)) { preview.error = error.code.isEmpty() ? HistoryError{QStringLiteral("restore-read-failed"), cleanMessage(historical.error)} : error; return preview; }
-    preview.valid=true; preview.sourceRevision=QString::fromUtf8(verify.output).trimmed(); preview.relativePath=relativePath; preview.bytes=historical.output.size(); preview.preservedCopy=current + QStringLiteral(".before-restore-") + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz")); return preview;
+    preview.valid=true; preview.sourceRevision=QString::fromUtf8(verify.output).trimmed(); preview.relativePath=relativePath; preview.bytes=historical.output.size(); preview.currentSha256=QCryptographicHash::hash(activeBytes,QCryptographicHash::Sha256); preview.historicalSha256=QCryptographicHash::hash(historical.output,QCryptographicHash::Sha256); preview.preservedCopy=current + QStringLiteral(".before-restore-") + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz")) + QStringLiteral("-") + QUuid::createUuid().toString(QUuid::WithoutBraces); return preview;
 }
 
 bool LocalHistoryService::applyRestore(const RestorePreview &preview, HistoryError *error) {
     if (!initialized(error) || !preview.valid) { setError(error, QStringLiteral("invalid-preview"), QStringLiteral("Create a valid restore preview before applying it.")); return false; }
     QString current; if (!validSelectedPath(preview.relativePath, &current, error)) return false;
+    QLockFile lock(current + QStringLiteral(".precision-history.lock")); lock.setStaleLockTime(0);
+    if (!lock.tryLock(1000)) { setError(error, QStringLiteral("restore-locked"), QStringLiteral("The native document is busy. Restore was not applied.")); return false; }
+    QFile active(current); if (!active.open(QIODevice::ReadOnly)) { setError(error, QStringLiteral("current-read-failed"), QStringLiteral("The current native document could not be read for restore protection.")); return false; }
+    const QByteArray activeBytes = active.readAll();
+    active.close();
+    if (QCryptographicHash::hash(activeBytes,QCryptographicHash::Sha256) != preview.currentSha256) { setError(error, QStringLiteral("restore-preview-stale"), QStringLiteral("The native document changed after preview. Create a new restore preview.")); return false; }
     auto verify = git({QStringLiteral("-C"), m_root, QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("--quiet"), preview.sourceRevision + QStringLiteral("^{commit}")});
     if (verify.exitCode != 0 || verify.timedOut || QString::fromUtf8(verify.output).trimmed() != preview.sourceRevision) { setError(error, QStringLiteral("invalid-revision"), QStringLiteral("The restore preview revision is no longer valid.")); return false; }
     auto historical = git({QStringLiteral("-C"), m_root, QStringLiteral("show"), preview.sourceRevision + QStringLiteral(":") + preview.relativePath});
     if (historical.exitCode != 0 || historical.timedOut || !validateDocument(historical.output, error)) { if (error && error->code.isEmpty()) setError(error, QStringLiteral("restore-read-failed"), cleanMessage(historical.error)); return false; }
-    if (!QFile::copy(current, preview.preservedCopy)) { setError(error, QStringLiteral("preserve-failed"), QStringLiteral("The current model could not be preserved before restoration.")); return false; }
-    QSaveFile out(current); if (!out.open(QIODevice::WriteOnly) || out.write(historical.output) != historical.output.size() || !out.commit()) { out.cancelWriting(); setError(error, QStringLiteral("restore-write-failed"), QStringLiteral("The current model remains preserved, but restoration could not be replaced atomically.")); return false; }
+    if (QCryptographicHash::hash(historical.output,QCryptographicHash::Sha256) != preview.historicalSha256) { setError(error, QStringLiteral("historical-content-changed"), QStringLiteral("The historical restore content changed after preview.")); return false; }
+    QJsonDocument currentDoc = QJsonDocument::fromJson(activeBytes), restoredDoc = QJsonDocument::fromJson(historical.output);
+    if (currentDoc.object().value(QStringLiteral("documentId")) != restoredDoc.object().value(QStringLiteral("documentId"))) { setError(error, QStringLiteral("document-id-mismatch"), QStringLiteral("The historical document does not match the active document identity.")); return false; }
+    QJsonObject restoredObject = restoredDoc.object(); restoredObject.insert(QStringLiteral("revision"), currentDoc.object().value(QStringLiteral("revision")).toDouble() + 1.0);
+    const QByteArray restoredBytes = QJsonDocument(restoredObject).toJson(QJsonDocument::Compact);
+    QFile backup(preview.preservedCopy); if (!backup.open(QIODevice::WriteOnly | QIODevice::NewOnly) || backup.write(activeBytes) != activeBytes.size()) { setError(error, QStringLiteral("preserve-failed"), QStringLiteral("The current model could not be preserved before restoration.")); return false; }
+    backup.close();
+    QSaveFile out(current); if (!out.open(QIODevice::WriteOnly) || out.write(restoredBytes) != restoredBytes.size() || !out.commit()) { out.cancelWriting(); setError(error, QStringLiteral("restore-write-failed"), QStringLiteral("The current model remains preserved, but restoration could not be replaced atomically.")); return false; }
     return true;
 }
 } // namespace precision::history
