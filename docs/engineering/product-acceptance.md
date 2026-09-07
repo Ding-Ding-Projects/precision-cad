@@ -2,7 +2,24 @@
 
 This contract defines a finite, explicit acceptance inventory for the initial professional CAD suite. It is an acceptance boundary, not a promise to implement every possible CAD feature. Its evidence-consistency mode validates only a declared fixture record. It never proves a release.
 
-The mandatory capability identifiers are hand-written in `scripts/check-product-acceptance.mjs`, including sketch entities, constraints, expressions and profile extraction; extrude, revolve, loft and sweep; fillet, chamfer, shell, draft and patterns; every named exchange, CAM and analysis capability; and installation, update and release records. The validator rejects an unregistered identifier, a duplicate, or a missing identifier. It does not discover the required list from candidate JSON or documentation.
+The mandatory capability identifiers are hand-written in `scripts/check-product-acceptance.mjs`. The summary table below is historical orientation only, not the complete identifier list. `approvedCapabilityMembers` is the authoritative current membership table and expands each named capability into an independently required ID. The validator rejects an unregistered identifier, a duplicate, or a missing identifier. It does not discover the required list from candidate JSON or documentation.
+
+## Explicit member groups
+
+| Group | Independently required members |
+| --- | --- |
+| Foundation | transactions, undo, redo, atomic save, exclusive writer, recovery, cancellation, stale result, bounds, migration |
+| Sketch | datum, point, line, polyline, rectangle, circle, arc, spline, construction, snap, trim, offset, closed profile, coincident, horizontal, vertical, parallel, perpendicular, tangent, equal, distance, radius, angle, degrees of freedom, conflict, unit expressions |
+| Viewport | depth, normals, multibody, orthographic, perspective, standard views, section, face, edge and vertex picking, orbit, pan, zoom, fit |
+| Solid and surface | pad, pocket, revolve, groove, hole, union, cut, intersection, translate, rotate, fillet, chamfer, shell, draft, mirror, linear pattern, circular pattern, loft, sweep, surface trim, sew, offset, thicken |
+| Exchange | import and export for STEP, IGES, STL and 3MF, units, source identity, healing, loss disclosure |
+| Daily workspace | document tabs, tree, properties, measure, recent, recovery, history compare, restore, keyboard, examples |
+| Assembly | components, nested instances, fixed, coincident, concentric, parallel, perpendicular, distance, angle, degrees of freedom, conflicts, interference, exploded view, bill of materials |
+| Drawing | base, projected, section, detail, dimensions, tolerances, annotations, title blocks, bill of materials, revision, PDF, DXF |
+| Sheet metal | thickness, bend parameters, base wall, flange, bend, relief, cut, unfold, refold, bend table, flat DXF |
+| CAM | stock, tools, fixtures, WCS, facing, profile, pocket, drill, three-axis roughing, three-axis finishing, simulation, collision, generic G-code |
+| Analysis | material, load, restraint, mesh, static, modal, results, revision, convergence |
+| Command API | API, discovery, diagnostics, batch, script client |
 
 | Capability | Acceptance scope |
 | --- | --- |
