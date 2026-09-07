@@ -61,8 +61,9 @@ QJsonObject fail(const QJsonObject& identity, const char* code, const QString& d
   return response;
 }
 
-bool finite(double v) { return std::isfinite(v) && std::abs(v) <= kMaxCoordinate; }
-bool number(const QJsonValue& value, double& out) { out = value.toDouble(std::numeric_limits<double>::quiet_NaN()); return finite(out); }
+bool finite(double v) { return std::isfinite(v); }
+bool coordinate(double v) { return finite(v) && std::abs(v) <= kMaxCoordinate; }
+bool number(const QJsonValue& value, double& out) { out = value.toDouble(std::numeric_limits<double>::quiet_NaN()); return coordinate(out); }
 
 bool point(const QJsonValue& value, gp_Pnt& out) {
   const QJsonArray a = value.toArray();
@@ -155,7 +156,7 @@ QJsonObject describe(const TopoDS_Shape& shape, bool meshRequested) {
   BRepCheck_Analyzer checker(shape, true); if (!checker.IsValid()) throw std::runtime_error("invalid_geometry");
   GProp_GProps properties; BRepGProp::VolumeProperties(shape, properties); if (!finite(properties.Mass())) throw std::runtime_error("non_finite_geometry");
   Bnd_Box bounds; BRepBndLib::Add(shape, bounds); Standard_Real xmin, ymin, zmin, xmax, ymax, zmax; bounds.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-  if (!finite(xmin) || !finite(ymin) || !finite(zmin) || !finite(xmax) || !finite(ymax) || !finite(zmax)) throw std::runtime_error("non_finite_geometry");
+  if (!coordinate(xmin) || !coordinate(ymin) || !coordinate(zmin) || !coordinate(xmax) || !coordinate(ymax) || !coordinate(zmax)) throw std::runtime_error("non_finite_geometry");
   QJsonObject result{{"brep", writeBrep(shape)}, {"valid", true}, {"volume", properties.Mass()}, {"bounds", QJsonArray{xmin, ymin, zmin, xmax, ymax, zmax}}};
   if (!meshRequested) return result;
   int faceCount = 0, edgeCount = 0; for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More(); faces.Next()) { if (++faceCount > kMaxTopologyFaces) throw std::runtime_error("topology_too_large"); } for (TopExp_Explorer edges(shape, TopAbs_EDGE); edges.More(); edges.Next()) { if (++edgeCount > kMaxTopologyEdges) throw std::runtime_error("topology_too_large"); }
@@ -163,8 +164,9 @@ QJsonObject describe(const TopoDS_Shape& shape, bool meshRequested) {
   const double deflection = std::clamp(diagonal * 1.0e-3, 1.0e-4, 10.0);
   BRepMesh_IncrementalMesh mesher(shape, deflection, false, 0.5, true); if (!mesher.IsDone()) throw std::runtime_error("tessellation_failed");
   QJsonArray vertices, normals, indices; int offset = 0, triangleCount = 0;
-  for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) { const TopoDS_Face face = TopoDS::Face(it.Current()); TopLoc_Location loc; Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc); if (tri.IsNull() || !tri->HasUVNodes()) continue; BRepAdaptor_Surface surface(face); const gp_Trsf trsf = loc.Transformation(); const bool reversed = face.Orientation() == TopAbs_REVERSED; if (offset + tri->NbNodes() > kMaxMeshVertices || triangleCount + tri->NbTriangles() > kMaxMeshTriangles) throw std::runtime_error("mesh_too_large"); for (int n = 1; n <= tri->NbNodes(); ++n) { gp_Pnt p = tri->Node(n).Transformed(trsf); const gp_Pnt2d uv = tri->UVNode(n); BRepLProp_SLProps properties(surface, uv.X(), uv.Y(), 1, Precision::Confusion()); if (!properties.IsNormalDefined()) throw std::runtime_error("tessellation_normal_failed"); gp_Dir normal = properties.Normal(); normal.Transform(trsf); if (reversed) normal.Reverse(); vertices.append(p.X()); vertices.append(p.Y()); vertices.append(p.Z()); normals.append(normal.X()); normals.append(normal.Y()); normals.append(normal.Z()); } for (int t = 1; t <= tri->NbTriangles(); ++t) { Poly_Triangle triangle = tri->Triangle(t); int a,b,c; triangle.Get(a,b,c); if (reversed) std::swap(b, c); indices.append(offset+a-1); indices.append(offset+b-1); indices.append(offset+c-1); } offset += tri->NbNodes(); triangleCount += tri->NbTriangles(); }
-  result.insert("mesh", QJsonObject{{"vertices", vertices}, {"normals", normals}, {"indices", indices}, {"absoluteDeflection", deflection}, {"relativeDeflection", 1.0e-3}}); return result;
+  for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) { const TopoDS_Face face = TopoDS::Face(it.Current()); TopLoc_Location loc; Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc); if (tri.IsNull() || !tri->HasUVNodes()) throw std::runtime_error("incomplete_tessellation"); BRepAdaptor_Surface surface(face); const gp_Trsf trsf = loc.Transformation(); const bool reversed = face.Orientation() == TopAbs_REVERSED; if (offset + tri->NbNodes() > kMaxMeshVertices || triangleCount + tri->NbTriangles() > kMaxMeshTriangles) throw std::runtime_error("mesh_too_large"); for (int n = 1; n <= tri->NbNodes(); ++n) { gp_Pnt p = tri->Node(n).Transformed(trsf); const gp_Pnt2d uv = tri->UVNode(n); BRepLProp_SLProps properties(surface, uv.X(), uv.Y(), 1, Precision::Confusion()); if (!properties.IsNormalDefined()) throw std::runtime_error("tessellation_normal_failed"); gp_Dir normal = properties.Normal(); if (reversed) normal.Reverse(); vertices.append(p.X()); vertices.append(p.Y()); vertices.append(p.Z()); normals.append(normal.X()); normals.append(normal.Y()); normals.append(normal.Z()); } for (int t = 1; t <= tri->NbTriangles(); ++t) { Poly_Triangle triangle = tri->Triangle(t); int a,b,c; triangle.Get(a,b,c); if (reversed) std::swap(b, c); indices.append(offset+a-1); indices.append(offset+b-1); indices.append(offset+c-1); } offset += tri->NbNodes(); triangleCount += tri->NbTriangles(); }
+  const double effectiveRelativeDeflection = diagonal > Precision::Confusion() ? deflection / diagonal : 0.0;
+  result.insert("mesh", QJsonObject{{"vertices", vertices}, {"normals", normals}, {"indices", indices}, {"absoluteDeflection", deflection}, {"targetRelativeDeflection", 1.0e-3}, {"effectiveRelativeDeflection", effectiveRelativeDeflection}}); return result;
 }
 } // namespace
 
