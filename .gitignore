@@ -1,0 +1,9 @@
+/build/
+/out/
+/.deps/
+/.cache/
+/.venv/
+/artifacts/
+*.user
+*.log
+__pycache__/
