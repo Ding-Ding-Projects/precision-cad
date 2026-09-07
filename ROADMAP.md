@@ -27,6 +27,7 @@ Checked items require implementation and verification. Intermediate builds are n
 - [ ] Revision-bound results and convergence comparison
 
 ## Product completion
+- [ ] Implement the explicit desktop and website rows in [surface completeness](docs/engineering/surface-completeness.md), tracked in issue #3
 - [ ] Versioned scripting/command API
 - [ ] Complete per-surface feature inventory and negative regressions
 - [ ] Accessible localized desktop and offline documentation
