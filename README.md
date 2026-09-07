@@ -32,7 +32,13 @@ Source is intended for distribution under GPL-3.0-or-later. Third-party componen
 - [Issue tracker](https://github.com/Ding-Ding-Projects/precision-cad/issues)
 - [Website build details](docs/engineering/build.md)
 
-The current build produces the website only. No native CAD executable or installer exists yet.
+The native development build is available through `build-desktop.bat`. The unsigned Windows development installer is produced locally through:
+
+```powershell
+.\build-installer.bat /s
+```
+
+It writes `Setup.exe`, `RELEASES`, and a full `.nupkg` under `artifacts/native/squirrel-windows`. It does not publish, tag, or create a release. The installer is unsigned and Windows will show an unknown-publisher warning.
 
 ## Website evidence
 

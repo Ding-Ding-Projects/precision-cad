@@ -62,7 +62,10 @@ foreach ($requiredDll in $manifest.occtSupport.requiredRuntimeDlls) {
 }
 $supportBins = @($supportBins | Select-Object -Unique)
 $env:PATH = ((@((Join-Path $QtRoot 'bin'),$occtBin) + $supportBins + @($env:PATH)) -join ';')
-& $cmake -S $root -B $nativeBuild -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$QtRoot" "-DOpenCASCADE_DIR=$occtRoot/cmake" -DBUILD_TESTING=ON
+# Packaging is a development-release producer.  Keep test targets out of its
+# build graph unless a caller explicitly asks this script to run them.
+$buildTesting = if ($Test) { 'ON' } else { 'OFF' }
+& $cmake -S $root -B $nativeBuild -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$QtRoot" "-DOpenCASCADE_DIR=$occtRoot/cmake" "-DBUILD_TESTING=$buildTesting"
 if ($LASTEXITCODE -ne 0) { throw 'Native CMake configuration failed.' }
 if ($ConfigureOnly) { return }
 & $cmake --build $nativeBuild --parallel 4

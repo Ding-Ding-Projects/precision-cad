@@ -20,5 +20,17 @@
     "innerArchive": "3rdparty-vc14-64.zip",
     "root": "3rdparty-vc14-64"
   },
+  "squirrel": {
+    "version": "1.9.1",
+    "archiveUrl": "https://www.nuget.org/api/v2/package/Squirrel.Windows/1.9.1",
+    "sha256": "a79f77c5927caacf24890222381b8df094a621cd997328f573f53cb17f5654df",
+    "archiveName": "Squirrel.Windows.1.9.1.nupkg",
+    "toolPath": "tools/Squirrel.exe"
+  },
+  "nuget": {
+    "version": "6.12.2",
+    "url": "https://dist.nuget.org/win-x86-commandline/v6.12.2/nuget.exe",
+    "sha256": "64f467376f2ee364ba389461df4a29a8f8dd9aa38120d29046e70b9c82045d97"
+  },
   "futureAdapters": { "sketchSolver": "SolveSpace 3.2, integration pending", "mesher": "Gmsh, acquisition and integration pending", "analysisSolver": "CalculiX, acquisition and integration pending" }
 }

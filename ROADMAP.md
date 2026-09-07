@@ -3,7 +3,7 @@
 Checked items require implementation and verification. Intermediate builds are not completion of the professional suite.
 
 ## Foundation
-- [ ] Reproducible Windows bootstrap and native build
+- [ ] Reproducible Windows bootstrap and native build (native build and local Squirrel package route exist; fresh-machine acquisition remains incomplete)
 - [ ] Versioned document model, transactions, undo and redo
 - [ ] Atomic save, exclusive writer protection and crash recovery
 - [ ] Isolated cancellable geometry operations
@@ -32,7 +32,7 @@ Checked items require implementation and verification. Intermediate builds are n
 - [ ] Complete per-surface feature inventory and negative regressions
 - [ ] Accessible localized desktop and offline documentation
 - [ ] Deterministic design parity and built UI evidence
-- [ ] Unsigned Squirrel.Windows installer and explicit-restart updates
+- [ ] Unsigned Squirrel.Windows installer and explicit-restart updates (local Squirrel package route exists; updater work remains)
 - [ ] Verified public release, download assets and provenance
 
 ## Deliberately excluded from this release
