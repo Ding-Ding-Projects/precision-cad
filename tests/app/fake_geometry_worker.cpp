@@ -26,6 +26,9 @@ int main(int argc, char **argv) {
   QJsonObject mesh{{"vertices",QJsonArray{0,0,0,1,0,0,0,1,0}},{"indices",QJsonArray{0,1,2}},{"normals",QJsonArray{0,0,1,0,0,1,0,0,1}},{"absoluteDeflection",0.001},{"targetRelativeDeflection",0.001},{"effectiveRelativeDeflection",0.001}}; if(dx==19) mesh.insert("indices",QJsonArray{0,1,999});
   if(dx==20) mesh.insert("vertices",QJsonArray{});
   QJsonObject result{{"brep","fake"},{"valid",true},{"volume",1.0},{"bounds",QJsonArray{0,0,0,1,1,1}},{"mesh",mesh}};
+  if(dx==26 || dx==27) { mesh.insert("vertices",QJsonArray{dx==26?1.0e9:1.0e9+1,0,0,1,0,0,0,1,0}); result.insert("mesh",mesh); }
+  if(dx==28 || dx==29) result.insert("bounds",QJsonArray{-1.0e9,0,0,dx==28?1.0e9:1.0e9+1,1,1});
+  if(dx==30) result.insert("brep",QString(4000,'b'));
   if(dx==21) result.insert("volume",QJsonValue());
   if(dx==22) result.insert("bounds",QJsonArray{2,0,0,1,1,1});
   if(dx==23) result.insert("valid",false);

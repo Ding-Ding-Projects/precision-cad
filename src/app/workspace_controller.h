@@ -55,6 +55,7 @@ private:
   QByteArray m_activeRequest, m_output, m_errors;
   QString m_operationId, m_baseId, m_candidatePath, m_selectedBody;
   quint64 m_baseRevision = 0;
+  qint64 m_resultBytes = 0, m_resultLimit = 64 * 1024 * 1024;
   bool m_opening = false;
   Reply m_committedResults;
   void stopWorker(); void drainWorker(bool errors);
