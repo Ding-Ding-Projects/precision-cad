@@ -1,6 +1,8 @@
 #include "precision_document.h"
 
 #include <QFile>
+#include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -67,42 +69,84 @@ int featureIndex(const QVector<Feature> &features, const QString &id) {
     for (int i = 0; i < features.size(); ++i) if (features[i].id == id) return i;
     return -1;
 }
+
+Result readBounded(QFile &file, QByteArray *out) {
+    const QFileInfo info(file);
+    if (info.size() > kMaxDocumentBytes) return Result::failure(QStringLiteral("Document byte size exceeds limit"));
+    const auto bytes = file.read(kMaxDocumentBytes + 1);
+    if (bytes.size() > kMaxDocumentBytes || !file.atEnd()) return Result::failure(QStringLiteral("Document byte size exceeds limit"));
+    if (file.error() != QFile::NoError) return Result::failure(QStringLiteral("Could not read document"));
+    *out = bytes;
+    return Result::success();
 }
 
-Document::Document(DocumentRecord initial) : m_record(std::move(initial)) {}
+// QJsonDocument intentionally normalizes duplicate keys. Reject them before parsing so a later
+// field cannot silently replace an earlier document field.
+bool duplicateObjectKey(const QByteArray &json) {
+    int pos = 0;
+    auto whitespace = [&] { while (pos < json.size() && QByteArray(" \t\r\n").contains(json[pos])) ++pos; };
+    std::function<bool()> value;
+    std::function<bool()> object = [&] {
+        if (pos >= json.size() || json[pos++] != '{') return false; whitespace(); QSet<QByteArray> keys;
+        if (pos < json.size() && json[pos] == '}') { ++pos; return false; }
+        while (pos < json.size()) {
+            whitespace(); if (pos >= json.size() || json[pos++] != '"') return false; QByteArray key;
+            while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; key += json[pos++]; }
+            if (pos >= json.size()) return false; ++pos; if (keys.contains(key)) return true; keys.insert(key); whitespace();
+            if (pos >= json.size() || json[pos++] != ':') return false; if (value()) return true; whitespace();
+            if (pos >= json.size()) return false; if (json[pos] == '}') { ++pos; return false; } if (json[pos++] != ',') return false;
+        }
+        return false;
+    };
+    std::function<bool()> array = [&] { if (pos >= json.size() || json[pos++] != '[') return false; whitespace(); if (pos < json.size() && json[pos] == ']') { ++pos; return false; } while (pos < json.size()) { if (value()) return true; whitespace(); if (pos >= json.size()) return false; if (json[pos] == ']') { ++pos; return false; } if (json[pos++] != ',') return false; } return false; };
+    value = [&] { whitespace(); if (pos >= json.size()) return false; if (json[pos] == '{') return object(); if (json[pos] == '[') return array(); if (json[pos] == '"') { ++pos; while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; ++pos; } if (pos >= json.size()) return false; ++pos; return false; } while (pos < json.size() && !QByteArray(" \t\r\n,]}").contains(json[pos])) ++pos; return false; };
+    return value();
+}
+}
+
+Document::Document(DocumentRecord initial) : m_record(std::move(initial)) {
+    const auto result = validate(m_record);
+    if (!result.ok) throw std::invalid_argument(result.error.toStdString());
+}
 const DocumentRecord &Document::record() const noexcept { return m_record; }
 
 Result Document::validate(const DocumentRecord &record) {
     if (record.schemaVersion != kDocumentSchemaVersion) return Result::failure(QStringLiteral("Unsupported schema version"));
+    if (record.revision > kMaxDocumentRevision) return Result::failure(QStringLiteral("Revision exceeds deterministic JSON range"));
     if (auto r = checkString(record.documentId, "documentId"); !r.ok) return r;
     if (record.units != QStringLiteral("mm") && record.units != QStringLiteral("in")) return Result::failure(QStringLiteral("Unsupported units"));
     if (record.features.size() > kMaxFeatures) return Result::failure(QStringLiteral("Feature count exceeds limit"));
-    QSet<QString> ids;
+    QHash<QString, int> indices;
     for (const auto &feature : record.features) {
         if (auto r = checkString(feature.id, "feature id"); !r.ok) return r;
         if (auto r = checkString(feature.type, "feature type"); !r.ok) return r;
         if (auto r = checkString(feature.label, "feature label", true); !r.ok) return r;
-        if (ids.contains(feature.id)) return Result::failure(QStringLiteral("Duplicate feature id: %1").arg(feature.id));
-        ids.insert(feature.id);
+        if (indices.contains(feature.id)) return Result::failure(QStringLiteral("Duplicate feature id: %1").arg(feature.id));
+        indices.insert(feature.id, indices.size());
         if (feature.inputRefs.size() > kMaxRefsPerFeature) return Result::failure(QStringLiteral("Too many feature references"));
         for (const auto &ref : feature.inputRefs) if (auto r = checkString(ref, "input reference"); !r.ok) return r;
         if (auto r = validateValue(feature.parameters, 0); !r.ok) return r;
     }
-    QSet<QString> active, done;
-    std::function<Result(const QString &)> visit = [&](const QString &id) -> Result {
-        if (done.contains(id)) return Result::success();
-        if (active.contains(id)) return Result::failure(QStringLiteral("Cyclic feature dependency at: %1").arg(id));
-        const int index = featureIndex(record.features, id); if (index < 0) return Result::failure(QStringLiteral("Unknown feature reference: %1").arg(id));
-        active.insert(id);
-        for (const auto &ref : record.features[index].inputRefs) { auto r = visit(ref); if (!r.ok) return r; }
-        active.remove(id); done.insert(id); return Result::success();
-    };
-    for (const auto &feature : record.features) { auto r = visit(feature.id); if (!r.ok) return r; }
+    for (const auto &feature : record.features) for (const auto &ref : feature.inputRefs) if (!indices.contains(ref)) return Result::failure(QStringLiteral("Unknown feature reference: %1").arg(ref));
+    QVector<int> colors(record.features.size(), 0);
+    struct Frame { int index; int nextRef; };
+    for (int root = 0; root < record.features.size(); ++root) {
+        if (colors[root] != 0) continue;
+        QVector<Frame> stack{{root, 0}}; colors[root] = 1;
+        while (!stack.isEmpty()) {
+            auto &frame = stack.last(); const auto &refs = record.features[frame.index].inputRefs;
+            if (frame.nextRef == refs.size()) { colors[frame.index] = 2; stack.removeLast(); continue; }
+            const int child = indices.value(refs[frame.nextRef++]);
+            if (colors[child] == 1) return Result::failure(QStringLiteral("Cyclic feature dependency at: %1").arg(record.features[child].id));
+            if (colors[child] == 0) { colors[child] = 1; stack.push_back({child, 0}); }
+        }
+    }
     return Result::success();
 }
 
 Result Document::transact(DocumentRecord candidate, quint64 expectedRevision) {
     if (expectedRevision != m_record.revision) return Result::failure(QStringLiteral("Stale document revision"));
+    if (m_record.revision == kMaxDocumentRevision) return Result::failure(QStringLiteral("Revision limit reached"));
     candidate.revision = m_record.revision + 1;
     if (auto r = validate(candidate); !r.ok) return r;
     m_undo.push_back(m_record); m_redo.clear(); m_record = std::move(candidate); return Result::success();
@@ -111,8 +155,8 @@ Result Document::addFeature(const Feature &feature, quint64 expectedRevision) { 
 Result Document::updateFeature(const Feature &feature, quint64 expectedRevision) { auto c = m_record; const int i = featureIndex(c.features, feature.id); if (i < 0) return Result::failure(QStringLiteral("Feature does not exist")); c.features[i] = feature; return transact(std::move(c), expectedRevision); }
 Result Document::removeFeature(const QString &id, quint64 expectedRevision) { auto c = m_record; const int i = featureIndex(c.features, id); if (i < 0) return Result::failure(QStringLiteral("Feature does not exist")); c.features.removeAt(i); return transact(std::move(c), expectedRevision); }
 Result Document::suppressFeature(const QString &id, bool suppressed, quint64 expectedRevision) { auto c = m_record; const int i = featureIndex(c.features, id); if (i < 0) return Result::failure(QStringLiteral("Feature does not exist")); c.features[i].suppressed = suppressed; return transact(std::move(c), expectedRevision); }
-Result Document::undo(quint64 expectedRevision) { if (expectedRevision != m_record.revision) return Result::failure(QStringLiteral("Stale document revision")); if (m_undo.isEmpty()) return Result::failure(QStringLiteral("Nothing to undo")); m_redo.push_back(m_record); auto next = m_undo.takeLast(); next.revision = m_record.revision + 1; m_record = std::move(next); return Result::success(); }
-Result Document::redo(quint64 expectedRevision) { if (expectedRevision != m_record.revision) return Result::failure(QStringLiteral("Stale document revision")); if (m_redo.isEmpty()) return Result::failure(QStringLiteral("Nothing to redo")); m_undo.push_back(m_record); auto next = m_redo.takeLast(); next.revision = m_record.revision + 1; m_record = std::move(next); return Result::success(); }
+Result Document::undo(quint64 expectedRevision) { if (expectedRevision != m_record.revision) return Result::failure(QStringLiteral("Stale document revision")); if (m_record.revision == kMaxDocumentRevision) return Result::failure(QStringLiteral("Revision limit reached")); if (m_undo.isEmpty()) return Result::failure(QStringLiteral("Nothing to undo")); m_redo.push_back(m_record); auto next = m_undo.takeLast(); next.revision = m_record.revision + 1; m_record = std::move(next); return Result::success(); }
+Result Document::redo(quint64 expectedRevision) { if (expectedRevision != m_record.revision) return Result::failure(QStringLiteral("Stale document revision")); if (m_record.revision == kMaxDocumentRevision) return Result::failure(QStringLiteral("Revision limit reached")); if (m_redo.isEmpty()) return Result::failure(QStringLiteral("Nothing to redo")); m_undo.push_back(m_record); auto next = m_redo.takeLast(); next.revision = m_record.revision + 1; m_record = std::move(next); return Result::success(); }
 
 QByteArray Document::serialize(const DocumentRecord &record) {
     QByteArray result("{\"documentId\":"); result += jsonString(record.documentId).toUtf8(); result += ",\"features\":[";
@@ -121,22 +165,24 @@ QByteArray Document::serialize(const DocumentRecord &record) {
 }
 Result Document::parse(const QByteArray &json, DocumentRecord *out) {
     if (!out || json.isEmpty() || json.size() > kMaxDocumentBytes) return Result::failure(QStringLiteral("Invalid document byte size"));
+    if (duplicateObjectKey(json)) return Result::failure(QStringLiteral("Duplicate JSON object field"));
     QJsonParseError error; const auto root = QJsonDocument::fromJson(json, &error); if (error.error != QJsonParseError::NoError || !root.isObject()) return Result::failure(QStringLiteral("Malformed document JSON"));
     const auto o = root.object(); const QSet<QString> allowed{"schemaVersion", "documentId", "revision", "units", "features"}; if (o.size() != allowed.size()) return Result::failure(QStringLiteral("Unknown or missing document fields")); for (const auto &key : o.keys()) if (!allowed.contains(key)) return Result::failure(QStringLiteral("Unknown document field"));
     if (!o.value("schemaVersion").isDouble() || !o.value("documentId").isString() || !o.value("revision").isDouble() || !o.value("units").isString() || !o.value("features").isArray()) return Result::failure(QStringLiteral("Document field type mismatch"));
-    const double revision = o.value("revision").toDouble(); if (revision < 0 || revision > static_cast<double>(std::numeric_limits<quint64>::max()) || std::floor(revision) != revision) return Result::failure(QStringLiteral("Invalid revision"));
-    DocumentRecord parsed; parsed.schemaVersion = o.value("schemaVersion").toInt(); parsed.documentId = o.value("documentId").toString(); parsed.revision = static_cast<quint64>(revision); parsed.units = o.value("units").toString();
+    const double schema = o.value("schemaVersion").toDouble(); const double revision = o.value("revision").toDouble(); if (!std::isfinite(schema) || std::floor(schema) != schema || schema != kDocumentSchemaVersion || !std::isfinite(revision) || revision < 0 || revision > static_cast<double>(kMaxDocumentRevision) || std::floor(revision) != revision) return Result::failure(QStringLiteral("Invalid document version or revision"));
+    DocumentRecord parsed; parsed.schemaVersion = static_cast<int>(schema); parsed.documentId = o.value("documentId").toString(); parsed.revision = static_cast<quint64>(revision); parsed.units = o.value("units").toString();
     for (const auto &entry : o.value("features").toArray()) { if (!entry.isObject()) return Result::failure(QStringLiteral("Feature is not an object")); const auto f = entry.toObject(); const QSet<QString> fields{"id","type","label","inputRefs","parameters","suppressed"}; if (f.size() != fields.size()) return Result::failure(QStringLiteral("Unknown or missing feature fields")); for (const auto &key : f.keys()) if (!fields.contains(key)) return Result::failure(QStringLiteral("Unknown feature field")); if (!f.value("id").isString() || !f.value("type").isString() || !f.value("label").isString() || !f.value("inputRefs").isArray() || !f.value("parameters").isObject() || !f.value("suppressed").isBool()) return Result::failure(QStringLiteral("Feature field type mismatch")); Feature feature{f.value("id").toString(), f.value("type").toString(), f.value("label").toString(), {}, f.value("parameters").toObject(), f.value("suppressed").toBool()}; for (const auto &ref : f.value("inputRefs").toArray()) { if (!ref.isString()) return Result::failure(QStringLiteral("Feature reference is not a string")); feature.inputRefs.push_back(ref.toString()); } parsed.features.push_back(std::move(feature)); }
     if (auto r = validate(parsed); !r.ok) return r; *out = std::move(parsed); return Result::success();
 }
 
-Result DocumentStorage::save(const QString &path, const DocumentRecord &record) {
+Result DocumentStorage::save(const QString &path, const DocumentRecord &record, std::optional<quint64> expectedPersistedRevision) {
     if (auto r = Document::validate(record); !r.ok) return r;
     QLockFile lock(path + QStringLiteral(".lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0)) return Result::failure(QStringLiteral("Document is locked by another writer"));
-    QFile current(path); if (current.exists() && current.open(QIODevice::ReadOnly)) { const auto old = current.readAll(); current.close(); DocumentRecord parsed; if (Document::parse(old, &parsed).ok) { QSaveFile backup(path + QStringLiteral(".bak")); if (!backup.open(QIODevice::WriteOnly) || backup.write(old) != old.size() || !backup.commit()) return Result::failure(QStringLiteral("Could not preserve valid backup")); } }
+    QFile current(path); if (current.exists()) { if (!current.open(QIODevice::ReadOnly)) return Result::failure(QStringLiteral("Could not read existing document")); QByteArray old; if (auto r = readBounded(current, &old); !r.ok) return r; current.close(); DocumentRecord parsed; if (auto r = Document::parse(old, &parsed); !r.ok) return Result::failure(QStringLiteral("Refusing to overwrite invalid existing document: %1").arg(r.error)); if (!expectedPersistedRevision || parsed.revision != *expectedPersistedRevision) return Result::failure(QStringLiteral("Persisted document revision changed")); QSaveFile backup(path + QStringLiteral(".bak")); if (!backup.open(QIODevice::WriteOnly) || backup.write(old) != old.size() || !backup.commit()) return Result::failure(QStringLiteral("Could not preserve valid backup")); }
+    else if (expectedPersistedRevision) return Result::failure(QStringLiteral("Expected persisted document does not exist"));
     QSaveFile file(path); const auto bytes = Document::serialize(record); if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return Result::failure(QStringLiteral("Atomic save failed: %1").arg(file.errorString()));
     return Result::success();
 }
-Result DocumentStorage::load(const QString &path, DocumentRecord *out) { QFile f(path); if (!f.open(QIODevice::ReadOnly)) return Result::failure(QStringLiteral("Could not open document")); return Document::parse(f.readAll(), out); }
+Result DocumentStorage::load(const QString &path, DocumentRecord *out) { QFile f(path); if (!f.open(QIODevice::ReadOnly)) return Result::failure(QStringLiteral("Could not open document")); QByteArray bytes; if (auto r = readBounded(f, &bytes); !r.ok) return r; return Document::parse(bytes, out); }
 Result DocumentStorage::recover(const QString &path, DocumentRecord *out, bool *usedBackup) { if (usedBackup) *usedBackup = false; auto r = load(path, out); if (r.ok) return r; r = load(path + QStringLiteral(".bak"), out); if (r.ok && usedBackup) *usedBackup = true; return r.ok ? r : Result::failure(QStringLiteral("Neither document nor backup is valid")); }
 } // namespace precision::core

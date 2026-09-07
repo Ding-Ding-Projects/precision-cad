@@ -4,9 +4,13 @@
 #include <QString>
 #include <QVector>
 
+#include <stdexcept>
+#include <optional>
+
 namespace precision::core {
 
 inline constexpr int kDocumentSchemaVersion = 1;
+inline constexpr quint64 kMaxDocumentRevision = 9007199254740991ULL;
 
 struct Feature {
     QString id;
@@ -34,6 +38,7 @@ struct Result {
 
 class Document final {
 public:
+    // Throws std::invalid_argument when the initial record violates the native record contract.
     explicit Document(DocumentRecord initial);
 
     const DocumentRecord &record() const noexcept;
@@ -57,7 +62,8 @@ private:
 
 class DocumentStorage final {
 public:
-    static Result save(const QString &path, const DocumentRecord &record);
+    // `expectedPersistedRevision` is null only for a new file. Existing files must match it.
+    static Result save(const QString &path, const DocumentRecord &record, std::optional<quint64> expectedPersistedRevision);
     static Result load(const QString &path, DocumentRecord *out);
     static Result recover(const QString &path, DocumentRecord *out, bool *usedBackup = nullptr);
 };
