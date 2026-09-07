@@ -19,6 +19,12 @@ qt_add_executable(precision_cad
   workspace_controller.h
   mesh_canvas.cpp
   mesh_canvas.h
+  viewport/mesh_geometry.cpp
+  viewport/mesh_geometry.h
+  viewport/viewport_camera.cpp
+  viewport/viewport_camera.h
+  viewport/viewport_picker.cpp
+  viewport/viewport_picker.h
 )
 set(PRECISION_CAD_FILE_DESCRIPTION "Precision CAD")
 set(PRECISION_CAD_INTERNAL_NAME "precision_cad")
@@ -38,7 +44,7 @@ qt_add_qml_module(precision_cad
 )
 
 target_compile_features(precision_cad PRIVATE cxx_std_20)
-target_link_libraries(precision_cad PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
+target_link_libraries(precision_cad PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Quick3D Qt6::OpenGL)
 target_include_directories(precision_cad PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_CURRENT_SOURCE_DIR}/../preferences)
 
 target_compile_definitions(precision_cad PRIVATE

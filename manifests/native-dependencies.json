@@ -3,7 +3,7 @@
   "target": "windows-x64",
   "compiler": { "family": "msvc", "toolset": "14.44", "sdk": "10.0.26100.0" },
   "cmake": { "minimum": "3.29.0" },
-  "qt": { "version": "6.8.3", "architecture": "msvc2022_64", "modules": ["Core", "Gui", "Qml", "Quick", "QuickControls2", "OpenGL"] },
+  "qt": { "version": "6.8.3", "architecture": "msvc2022_64", "modules": ["Core", "Gui", "Qml", "Quick", "QuickControls2", "Quick3D", "ShaderTools", "OpenGL"] },
   "occt": {
     "version": "8.0.1",
     "archiveUrl": "https://github.com/Open-Cascade-SAS/OCCT/releases/download/V8.0.1/opencascade-release-no-pch.zip",
