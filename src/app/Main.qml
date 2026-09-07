@@ -56,6 +56,14 @@ ApplicationWindow {
       ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
+  footer: ToolBar { id: provenanceBar; objectName: "provenanceBar"; padding: 8
+    implicitHeight: provenanceText.implicitHeight + topPadding + bottomPadding
+    contentItem: Label { id: provenanceText; objectName: "versionInfo"; width: provenanceBar.availableWidth
+      textFormat: Text.PlainText; wrapMode: Text.Wrap; elide: Text.ElideNone
+      text: root.copy("Version","版本").replace(/\n/g, " / ") + " " + buildVersion + "  ·  " + root.copy("Updated","更新時間").replace(/\n/g, " / ") + " " + buildTime
+      Accessible.role: Accessible.StaticText; Accessible.name: text
+    }
+  }
   FileDialog { id: saveDialog; currentFolder: root.documentFolder; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
   FileDialog { id: openDialog; currentFolder: root.documentFolder; title: root.copy("Open native Precision CAD document","開啟原生精準 CAD 文件"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.open(workspace.localPath(selectedFile)) }
   FileDialog { id: vocabularyDialog; currentFolder: root.documentFolder; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
@@ -119,20 +127,25 @@ ApplicationWindow {
   }
   SplitView { objectName: "workspaceSplit"; anchors.fill: parent
     Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
-      Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
+      ScrollView { id: modelScroll; objectName: "modelScroll"; anchors.fill: parent; contentWidth: availableWidth
+      Column { objectName: "modelColumn"; width: modelScroll.availableWidth; height: Math.max(modelScroll.availableHeight, modelHeader.implicitHeight + editDimensionsButton.implicitHeight + selectionHelp.implicitHeight + spacing * 3 + 100); spacing: 8
         Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
         ListView { id: tree; objectName: "modelTree"; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
-          delegate: ItemDelegate { width: tree.width; highlighted: root.selectedLeft === modelData.id || root.selectedRight === modelData.id
+          delegate: ItemDelegate { id: modelDelegate; width: tree.width; highlighted: workspace.selectedBody === modelData.id
+            Accessible.role: Accessible.ListItem
+            Accessible.selected: workspace.selectedBody === modelData.id
+            Accessible.name: modelData.label + (workspace.selectedBody === modelData.id ? " " + root.copy("Selected", "已選取") : "")
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id; workspace.selectBody(modelData.id) }
-            contentItem: Row { id: modelRow; objectName: "modelRow"; width: parent.width; spacing: 8
-              Label { id: modelRowLabel; objectName: "modelRowLabel"; textFormat: Text.PlainText; text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, modelRow.width - includeBody.implicitWidth - modelRow.spacing); elide: Text.ElideRight }
+            contentItem: Row { id: modelRow; objectName: "modelRow"; width: modelDelegate.availableWidth; spacing: 8
+              Label { id: modelRowLabel; objectName: "modelRowLabel"; textFormat: Text.PlainText; text: (workspace.selectedBody === modelData.id ? root.copy("Selected", "已選取") + " · " : "") + (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, modelRow.width - includeBody.implicitWidth - modelRow.spacing); elide: Text.ElideRight }
               Switch { id: includeBody; objectName: "modelRowIncludeSwitch"; Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
             }
           }
         }
         Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: !workspace.busy && workspace.editableDimensions(workspace.selectedBody).editable; onClicked: root.openDimensions() }
         Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+      }
       }
     }
     Pane { SplitView.fillWidth: true
@@ -151,8 +164,8 @@ ApplicationWindow {
           Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(-35, -45, 0); brightness: 1.25 }
           Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(35, 135, 0); brightness: .45 }
           Quick3D.Model { id: meshModel; objectName: "meshModel"; visible: sceneMesh.valid; pickable: true
-            geometry: MeshGeometry { id: sceneMesh; objectName: "sceneMesh"; vertices: viewport.vertices; indices: viewport.indices; normals: typeof workspace.meshNormals === "undefined" ? [] : workspace.meshNormals; parts: typeof workspace.meshParts === "undefined" ? [] : workspace.meshParts; fallbackBodyId: workspace.selectedBody }
-            materials: Quick3D.PrincipledMaterial { baseColor: root.Material.accent; roughness: .65; metalness: .15; cullMode: Quick3D.Material.NoCulling }
+            geometry: MeshGeometry { id: sceneMesh; objectName: "sceneMesh"; vertices: viewport.vertices; indices: viewport.indices; normals: typeof workspace.meshNormals === "undefined" ? [] : workspace.meshNormals; parts: typeof workspace.meshParts === "undefined" ? [] : workspace.meshParts; fallbackBodyId: workspace.selectedBody; selectedBodyId: workspace.selectedBody; baseColor: root.Material.foreground; selectionColor: root.Material.accent }
+            materials: Quick3D.PrincipledMaterial { objectName: "meshMaterial"; baseColor: "white"; vertexColorsEnabled: true; roughness: .65; metalness: .15; cullMode: Quick3D.Material.NoCulling }
           }
         }
         Label { anchors.centerIn: parent; visible: !sceneMesh.valid; textFormat: Text.PlainText; text: root.copy("No valid regenerated mesh","尚未生成有效網格"); color: Material.foreground }
@@ -171,6 +184,7 @@ ApplicationWindow {
           onWheel: (w)=> { cameraState.zoomBy(Math.exp(-w.angleDelta.y*.001)); w.accepted=true }
         }
         Flow { objectName: "viewControls"; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: 4
+      Label { text: root.copy("Z up · XY top", "Z 向上 · XY 頂視"); Accessible.name: root.copy("CAD axes: Z up; top view is the XY plane", "CAD 座標：Z 向上，頂視為 XY 平面"); padding: 8 }
       ToolButton { objectName: "projectionButton"; text: cameraState.perspective ? root.copy("Orthographic", "正投影") : root.copy("Perspective", "透視"); onClicked: cameraState.perspective=!cameraState.perspective }
       Repeater { model: [root.copy("Iso","等角"),root.copy("Front","前"),root.copy("Back","後"),root.copy("Left","左"),root.copy("Right","右"),root.copy("Top","頂"),root.copy("Bottom","底")]
         ToolButton { required property int index; required property string modelData; objectName: "standardView"+index; text: modelData; onClicked: cameraState.standardView(index) }
@@ -190,7 +204,6 @@ ApplicationWindow {
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
-        Label { objectName: "versionInfo"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
         Label { objectName: "inspectorNotice"; width: parent.width; textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
       }

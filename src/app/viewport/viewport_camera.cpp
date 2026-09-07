@@ -24,13 +24,13 @@ void ViewportCamera::fit() {
 }
 void ViewportCamera::setStandardView(StandardView value) {
   switch(value) {
-  case StandardView::Isometric:m_yaw=-45;m_pitch=-35.26438968;break;
+  case StandardView::Isometric:m_yaw=45;m_pitch=35.26438968;break;
   case StandardView::Front:m_yaw=0;m_pitch=0;break;
   case StandardView::Back:m_yaw=180;m_pitch=0;break;
   case StandardView::Left:m_yaw=-90;m_pitch=0;break;
   case StandardView::Right:m_yaw=90;m_pitch=0;break;
-  case StandardView::Top:m_yaw=0;m_pitch=-89.999;break;
-  case StandardView::Bottom:m_yaw=0;m_pitch=89.999;break;
+  case StandardView::Top:m_yaw=0;m_pitch=90;break;
+  case StandardView::Bottom:m_yaw=0;m_pitch=-90;break;
   }
   emit changed();
 }
@@ -39,8 +39,8 @@ void ViewportCamera::setOrbitDegrees(qreal yaw,qreal pitch) { if(!std::isfinite(
 void ViewportCamera::orbit(qreal dx,qreal dy) { setOrbitDegrees(m_yaw+dx*.45,m_pitch+dy*.45); }
 void ViewportCamera::pan(qreal dx,qreal dy) { if(!std::isfinite(dx)||!std::isfinite(dy))return; const double units=2*halfHeight()/m_viewport.height(); m_fitted=false; m_center+=right()*float(-dx*units)+up()*float(dy*units);emit changed(); }
 void ViewportCamera::zoomBy(qreal factor) { if(!std::isfinite(factor)||factor<=0)return; m_fitted=false; m_distance=std::clamp(m_distance*factor,m_radius*.02,m_radius*10000);emit changed(); }
-QVector3D ViewportCamera::forward() const { const double y=qDegreesToRadians(m_yaw),p=qDegreesToRadians(m_pitch); return QVector3D(-std::sin(y)*std::cos(p),std::sin(p),-std::cos(y)*std::cos(p)).normalized(); }
-QVector3D ViewportCamera::right() const { return QVector3D::crossProduct(forward(),{0,1,0}).normalized(); }
+QVector3D ViewportCamera::forward() const { const double y=qDegreesToRadians(m_yaw),p=qDegreesToRadians(m_pitch); return QVector3D(-std::sin(y)*std::cos(p),std::cos(y)*std::cos(p),-std::sin(p)).normalized(); }
+QVector3D ViewportCamera::right() const { const double y=qDegreesToRadians(m_yaw);return {float(std::cos(y)),float(std::sin(y)),0}; }
 QVector3D ViewportCamera::up() const { return QVector3D::crossProduct(right(),forward()).normalized(); }
 QVector3D ViewportCamera::eye() const { return m_center-forward()*float(m_distance); }
 QQuaternion ViewportCamera::orientation() const { return QQuaternion::fromDirection(-forward(),up()); }

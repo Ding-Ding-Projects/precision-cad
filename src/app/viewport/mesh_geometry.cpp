@@ -13,9 +13,26 @@ QString MeshGeometry::bodyForTriangle(int index) const { for(const auto &part:m_
 void MeshGeometry::setVertices(const QVariantList &v) { if(m_vertexValues==v)return; m_vertexValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
 void MeshGeometry::setIndices(const QVariantList &v) { if(m_indexValues==v)return; m_indexValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
 void MeshGeometry::setNormals(const QVariantList &v) { if(m_normalValues==v)return; m_normalValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
+void MeshGeometry::setFallbackBodyId(const QString &value) { if(value==m_fallbackBodyId)return; m_fallbackBodyId=value;updateColors(); }
+void MeshGeometry::setSelectedBodyId(const QString &value) { if(value==m_selectedBodyId)return; m_selectedBodyId=value;updateColors(); }
+void MeshGeometry::setBaseColor(QColor value) { if(!value.isValid()||value==m_baseColor)return;m_baseColor=value;updateColors(); }
+void MeshGeometry::setSelectionColor(QColor value) { if(!value.isValid()||value==m_selectionColor)return;m_selectionColor=value;updateColors(); }
+void MeshGeometry::updateColors() {
+  m_selectedTriangleCount=0;
+  if(m_valid) {
+    QVector<bool> selected(m_positions.size(),false);
+    for(int triangle=0;triangle<m_indices.size()/3;++triangle) if(!m_selectedBodyId.isEmpty()&&bodyForTriangle(triangle)==m_selectedBodyId) {
+      ++m_selectedTriangleCount;for(int corner=0;corner<3;++corner)selected[m_indices[3*triangle+corner]]=true;
+    }
+    QByteArray data=vertexData();
+    for(qsizetype i=0;i<m_positions.size();++i) { const QColor color=selected[i]?m_selectionColor:m_baseColor; const float rgba[]={float(color.redF()),float(color.greenF()),float(color.blueF()),1.f}; std::memcpy(data.data()+i*40+24,rgba,16); }
+    setVertexData(data);update();
+  }
+  emit appearanceChanged();
+}
 QVariantList MeshGeometry::sourcePoint(QVector3D p) const { return {m_origin[0]+double(p.x())/m_scale,m_origin[1]+double(p.y())/m_scale,m_origin[2]+double(p.z())/m_scale}; }
 void MeshGeometry::rebuild() {
-  const auto notify=qScopeGuard([this] { emit sceneChanged(); });
+  const auto notify=qScopeGuard([this] { updateColors(); emit sceneChanged(); });
   clear(); m_valid=false; m_suppliedNormals=false; m_positions.clear(); m_indices.clear();
   setBounds({},{}); update();
   QVariantList vertices=m_vertexValues,indices=m_indexValues,normalValues=m_normalValues;
@@ -73,11 +90,11 @@ void MeshGeometry::rebuild() {
     for(qsizetype i=0;i<m_indices.size();i+=3) { const auto a=m_indices[i],b=m_indices[i+1],c=m_indices[i+2]; const auto n=QVector3D::crossProduct(m_positions[b]-m_positions[a],m_positions[c]-m_positions[a]); normals[a]+=n; normals[b]+=n; normals[c]+=n; }
     for(auto &n:normals) n=n.lengthSquared()>1e-12f?n.normalized():QVector3D(0,0,1);
   }
-  QByteArray data; data.resize(count*24);
-  for(qsizetype i=0;i<count;++i) { const float v[]={m_positions[i].x(),m_positions[i].y(),m_positions[i].z(),normals[i].x(),normals[i].y(),normals[i].z()}; std::memcpy(data.data()+i*24,v,24); }
+  QByteArray data; data.resize(count*40);
+  for(qsizetype i=0;i<count;++i) { const float v[]={m_positions[i].x(),m_positions[i].y(),m_positions[i].z(),normals[i].x(),normals[i].y(),normals[i].z()}; std::memcpy(data.data()+i*40,v,24); }
   QByteArray indexData; indexData.resize(m_indices.size()*sizeof(quint32)); std::memcpy(indexData.data(),m_indices.constData(),indexData.size());
-  setStride(24); setPrimitiveType(PrimitiveType::Triangles);
-  addAttribute(Attribute::PositionSemantic,0,Attribute::F32Type); addAttribute(Attribute::NormalSemantic,12,Attribute::F32Type); addAttribute(Attribute::IndexSemantic,0,Attribute::U32Type);
+  setStride(40); setPrimitiveType(PrimitiveType::Triangles);
+  addAttribute(Attribute::PositionSemantic,0,Attribute::F32Type); addAttribute(Attribute::NormalSemantic,12,Attribute::F32Type); addAttribute(Attribute::IndexSemantic,0,Attribute::U32Type); addAttribute(Attribute::ColorSemantic,24,Attribute::F32Type);
   setVertexData(data); setIndexData(indexData); setBounds(minimum,maximum); m_valid=true; update();
 }
 }

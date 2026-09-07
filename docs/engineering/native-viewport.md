@@ -17,3 +17,19 @@ Every index must be finite, integral and in range before upload. Nonfinite coord
 ## Verification
 
 `viewport-math` covers camera rays and nearest triangle, edge and vertex math. `workspace-qml` additionally instantiates production Main.qml and exercises actual camera/geometry bindings, projection and standard-view controls, fit, pan, orbit, click selection, translated multi-body input and invalid-buffer clearing. CTest prepends the configured Qt runtime directory. These checks do not replace inspection of the built application's depth rendering on a real graphics backend.
+
+## Selected-body appearance
+
+The render buffer includes per-vertex color data derived from the same body triangle ranges used for selection. The selected body uses the window accent color; other bodies use the foreground color. Changing selection only updates color bytes, preserving the camera and model positions. The tree marks the current body with a localized Selected label and the native accessibility selected state. Boolean operand tracking remains separate from the current body.
+
+The scoped native follow-up uses existing Qt Quick Controls and Qt Quick 3D primitives. The required Material Designer creation/export flow was unavailable because no runnable build existed in the inspected project or tool cache; no design preview is claimed as production evidence.
+
+## CAD coordinate convention
+
+Model coordinates use Z up. Top looks down positive Z onto XY, with X to the right and Y toward the top of the screen. Front looks from negative Y with positive Z up. Right looks from positive X with positive Z up. The isometric view is above the positive-X, negative-Y quadrant. A native label beside the view controls identifies the convention. The exact pole basis is computed analytically, so Top and Bottom do not rely on a nearly vertical approximation.
+
+## Persistent build provenance
+
+The initial workspace has a native toolbar footer containing the running version and recorded update time, including the original seconds and timezone. It consumes the same `buildVersion` and `buildTime` context values as before; it never derives either value from launch time. The label wraps inside the available width, has no elision, exposes its complete text to accessibility, and remains outside the scrollable inspector. Focused geometry checks cover 800 × 600, font scale 1.5, English, Cantonese and bilingual copy, and both themes.
+
+At large bilingual text sizes, the model pane scrolls its complete contents and reserves at least 100 logical pixels for its model list. The persistent footer never depends on this scrolling path; version provenance remains on the initial screen.

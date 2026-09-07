@@ -12,6 +12,7 @@
 #include "viewport/viewport_camera.h"
 #include "viewport/mesh_geometry.h"
 #include <limits>
+#include <cstring>
 class ModelRowWorkspace final : public QObject {
  Q_OBJECT
  Q_PROPERTY(QVariantList meshParts MEMBER sceneParts NOTIFY meshChanged)
@@ -79,16 +80,19 @@ private slots:
   window->show();QCoreApplication::processEvents();
   QVERIFY(mesh->valid());QCOMPARE(mesh->localPositions().size(),6);QVERIFY(mesh->boundsMax().x()>mesh->boundsMin().x());QCOMPARE(camera->geometry(),mesh);
   QCOMPARE(camera->viewportSize(),QSizeF(viewport->width(),viewport->height()));
-  camera->standardView(1);camera->fit();
+  camera->standardView(5);camera->fit();
   const QPointF center(viewport->width()/2,viewport->height()/2);
   const auto hit=camera->pick(center.x(),center.y());QCOMPARE(hit.value("bodyId").toString(),QString("near"));QCOMPARE(hit.value("triangleIndex").toInt(),1);QCOMPARE(hit.value("kind").toString(),QString("meshTriangle"));
   QVERIFY(std::abs(hit.value("position").toList()[2].toDouble()-(origin+1))<.001);
   QCOMPARE(native->property("camera").value<QObject*>(),perspective);
   QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
   QCOMPARE(perspective->property("rotation").value<QQuaternion>(),camera->orientation());
+  const auto topForward=perspective->property("rotation").value<QQuaternion>().rotatedVector({0,0,-1});QVERIFY((topForward-QVector3D(0,0,-1)).length()<1e-5);
+  camera->standardView(1);const auto frontRotation=perspective->property("rotation").value<QQuaternion>();QVERIFY((frontRotation.rotatedVector({0,0,-1})-QVector3D(0,1,0)).length()<1e-5);QVERIFY((frontRotation.rotatedVector({0,1,0})-QVector3D(0,0,1)).length()<1e-5);camera->standardView(5);
+
   const auto originalEye=camera->eye();camera->orbit(60,20);QVERIFY(camera->eye()!=originalEye);
   QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
-  camera->standardView(1);camera->fit();
+  camera->standardView(5);camera->fit();
   const auto panPoint=camera->center();const auto beforePan=camera->project(panPoint);camera->pan(23,-17);
   const auto afterPan=camera->project(panPoint);QVERIFY((afterPan-beforePan-QPointF(23,-17)).manhattanLength()<.001);
   const auto beforeZoom=camera->distance();camera->zoomBy(.5);QVERIFY(camera->distance()<beforeZoom);
@@ -97,7 +101,15 @@ private slots:
   QVERIFY(std::abs(orthographic->property("horizontalMagnification").toDouble()-camera->magnification())<1e-5);
   QCOMPARE(camera->pick(center.x(),center.y()).value("bodyId").toString(),QString("near"));
   const QPoint click=viewport->mapToScene(center).toPoint();QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,click);QCOMPARE(workspace.selectedBody(),QString("near"));
-  camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
+  QCOMPARE(mesh->selectedBodyId(),QString("near"));QCOMPARE(mesh->selectedTriangleCount(),1);QCOMPARE(mesh->stride(),40);
+  QVERIFY(root->findChild<QObject*>("meshMaterial")->property("vertexColorsEnabled").toBool());
+  float unselectedRgba[4],selectedRgba[4];const auto colored=mesh->vertexData();std::memcpy(unselectedRgba,colored.constData()+24,16);std::memcpy(selectedRgba,colored.constData()+3*40+24,16);
+  QVERIFY(std::abs(unselectedRgba[0]-selectedRgba[0])+std::abs(unselectedRgba[1]-selectedRgba[1])+std::abs(unselectedRgba[2]-selectedRgba[2])>.01);
+  camera->pan(11,7);const auto selectionEye=camera->eye();const auto selectionTarget=camera->center();workspace.selectBody("far");
+  QCOMPARE(mesh->selectedBodyId(),QString("far"));QCOMPARE(mesh->selectedTriangleCount(),1);QCOMPARE(camera->eye(),selectionEye);QCOMPARE(camera->center(),selectionTarget);
+  const auto recolored=mesh->vertexData();QVERIFY(recolored!=colored);
+
+  camera->standardView(5);camera->fit();const auto panOrigin=camera->center();
   QTest::mousePress(window,Qt::RightButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(25,10));QTest::mouseRelease(window,Qt::RightButton,Qt::NoModifier,click+QPoint(25,10));QVERIFY(camera->center()!=panOrigin);
   const auto dragEye=camera->eye();QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(35,15));QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,click+QPoint(35,15));QVERIFY(camera->eye()!=dragEye);
   for(int view=0;view<7;++view) { QObject *button=nullptr;for(auto *item:root->findChild<QQuickItem*>("viewControls")->childItems())if(item->objectName()=="standardView"+QString::number(view))button=item;QVERIFY(button);QVERIFY(QMetaObject::invokeMethod(button,"clicked"));camera->fit();QVERIFY((camera->project(camera->center())-center).manhattanLength()<.01); }
@@ -142,6 +154,10 @@ private slots:
   QVERIFY(clickRow(0)); QCOMPARE(workspace.selectedBody(),QString("A"));
   const auto meshA=viewport->property("vertices").toList(); QVERIFY(!meshA.isEmpty());
   QVERIFY(clickRow(1)); QCOMPARE(workspace.selectedBody(),QString("B"));
+  QObject *selectedRow=tree->property("currentItem").value<QObject*>();QVERIFY(selectedRow);QVERIFY(selectedRow->property("highlighted").toBool());
+  QQmlExpression selectedState(qmlContext(selectedRow),selectedRow,"Accessible.selected");QVERIFY(selectedState.evaluate().toBool());
+  QQmlExpression selectedName(qmlContext(selectedRow),selectedRow,"Accessible.name");QVERIFY(selectedName.evaluate().toString().contains("Selected"));
+
   QCOMPARE(root->property("selectedLeft").toString(),QString("A"));
   QCOMPARE(root->property("selectedRight").toString(),QString("B"));
   QCOMPARE(viewport->property("vertices").toList(),workspace.meshVertices()); QVERIFY(viewport->property("vertices").toList()!=meshA);
@@ -169,6 +185,22 @@ private slots:
   QCOMPARE(workspace.selectedBody(),QString()); QCOMPARE(root->property("selectedLeft").toString(),QString()); QCOMPARE(root->property("selectedRight").toString(),QString());
   QCOMPARE(root->property("editTargetId").toString(),QString()); QTRY_VERIFY(!dialog->property("visible").toBool()); QVERIFY(!edit->property("enabled").toBool()); QVERIFY(viewport->property("vertices").toList().isEmpty());
   QVERIFY(QMetaObject::invokeMethod(dialog,"accepted")); QCOMPARE(workspace.updateCount,1);
+ }
+ void provenanceRemainsVisibleAtMinimumSize() {
+  QTemporaryDir dir;QVERIFY(dir.isValid());precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));precision::preferences::PersonalVocabularyStore vocab(dir.filePath("vocab.json"));WorkspaceController workspace;UiText ui(&prefs,&vocab);QQmlEngine engine;
+  const QString version="0.1.0-dev.91.f29406b",time="2026-09-07 17:49:39 Eastern Daylight Time";
+  auto context=engine.rootContext();context->setContextProperty("preferences",&prefs);context->setContextProperty("vocabulary",&vocab);context->setContextProperty("workspace",&workspace);context->setContextProperty("uiText",&ui);context->setContextProperty("buildVersion",version);context->setContextProperty("buildTime",time);
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH)));QVERIFY2(component.isReady(),qPrintable(component.errorString()));std::unique_ptr<QObject> root(component.create());QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
+  auto *window=qobject_cast<QQuickWindow*>(root.get());QVERIFY(window);auto *footer=root->findChild<QQuickItem*>("provenanceBar");auto *text=root->findChild<QQuickItem*>("versionInfo");auto *split=root->findChild<QQuickItem*>("workspaceSplit");QVERIFY(footer);QVERIFY(text);QVERIFY(split);
+  QVERIFY(prefs.setFontScale(1.5));window->resize(800,600);window->show();
+  for(const auto &language:QStringList{"en","yue","both"})for(const auto &theme:QStringList{"light","dark"}) {
+    QVERIFY(prefs.setLanguageMode(language));QVERIFY(prefs.setTheme(theme));QCoreApplication::processEvents();QTest::qWait(20);QCoreApplication::processEvents();
+    const auto rect=text->mapRectToScene(text->boundingRect()),barRect=footer->mapRectToScene(footer->boundingRect()),workspaceRect=split->mapRectToScene(split->boundingRect());
+    QVERIFY(text->isVisible());QVERIFY(rect.left()>=0);QVERIFY(rect.right()<=window->width()+.1);QVERIFY(rect.top()>=0);QVERIFY(rect.bottom()<=window->height()+.1);
+    QVERIFY(rect.height()>=text->property("contentHeight").toDouble()-.1);QVERIFY(rect.width()>=text->property("contentWidth").toDouble()-.1);
+    QVERIFY(workspaceRect.bottom()<=barRect.top()+.1);QVERIFY(barRect.bottom()<=window->height()+.1);
+    const auto value=text->property("text").toString();QVERIFY(value.contains(version));QVERIFY(value.contains(time));QQmlExpression accessible(qmlContext(text),text,"Accessible.name");QCOMPARE(accessible.evaluate().toString(),value);
+  }
  }
  void surfaceBindings() {
   QTemporaryDir dir; QVERIFY(dir.isValid());
@@ -231,7 +263,7 @@ private slots:
    QVERIFY2(help->mapRectToScene(help->boundingRect()).bottom() <= modelColumn->mapRectToScene(modelColumn->boundingRect()).bottom()+0.1, "model selection help must remain reachable at the model-pane bottom");
   }
   QVERIFY(prefs.setLanguageMode("en")); QVERIFY(prefs.setFontScale(1.0)); QVERIFY(prefs.setTheme("light")); window->resize(1280,820); QCoreApplication::processEvents(); QTest::qWait(20); QCoreApplication::processEvents();
-  QVERIFY2(version->mapRectToScene(version->boundingRect()).intersects(inspectorScroll->mapRectToScene(inspectorScroll->boundingRect())), "version provenance must be initially visible at the default client area");
+  QVERIFY2(root->findChild<QQuickItem*>("provenanceBar")->mapRectToScene(root->findChild<QQuickItem*>("provenanceBar")->boundingRect()).contains(version->mapRectToScene(version->boundingRect())), "version provenance must be initially visible at the default client area");
   QVERIFY(prefs.setLanguageMode("both")); QVERIFY(prefs.setEnglishTone(5)); QVERIFY(prefs.setCantoneseTone(5)); QVERIFY(prefs.setFontScale(1.5)); QVERIFY(prefs.setTheme("dark")); window->resize(800,600); QCoreApplication::processEvents(); QTest::qWait(20); QCoreApplication::processEvents();
   QVERIFY2(qAbs(toolbar->height()-(flow->implicitHeight()+toolbar->property("topPadding").toReal()+toolbar->property("bottomPadding").toReal())) < 0.1, "high-content toolbar must include its visible Flow and native vertical insets");
   const QRectF highToolbarRect=toolbar->mapRectToScene(toolbar->boundingRect()); QCOMPARE(flow->childItems().size(), 13);
@@ -239,6 +271,7 @@ private slots:
   QVERIFY2(qAbs(highWorkspaceRect.top()-highToolbarRect.bottom()) < 0.1 && workspaceSplit->height() >= 300, "high-content minimum must retain a positive workspace below the toolbar");
   for (auto *control : flow->childItems()) { const QRectF controlRect=control->mapRectToScene(control->boundingRect()); QVERIFY2(controlRect.top() >= highToolbarRect.top()-0.1 && controlRect.bottom() <= highToolbarRect.bottom()+0.1, "every high-content toolbar control must remain inside the measured toolbar"); }
   QVERIFY2(help->mapRectToScene(help->boundingRect()).bottom() <= modelColumn->mapRectToScene(modelColumn->boundingRect()).bottom()+0.1, "high-content model selection help must remain reachable");
+  auto *modelScroll=root->findChild<QQuickItem*>("modelScroll");QVERIFY(modelScroll);QVERIFY(modelScroll->property("contentHeight").toDouble()>=modelColumn->height()-.1);
   const QRectF scrollRect=inspectorScroll->mapRectToScene(inspectorScroll->boundingRect());
   QObject *flickable=inspectorScroll->property("contentItem").value<QObject*>(); QVERIFY2(flickable, "ScrollView must expose its real content item");
   QVERIFY2(flickable->metaObject()->indexOfProperty("contentY") >= 0 && flickable->metaObject()->indexOfProperty("contentHeight") >= 0, "ScrollView content item must expose real scrolling properties");
