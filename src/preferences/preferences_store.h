@@ -75,7 +75,7 @@ signals:
 
 private:
     struct Values;
-    bool replace(const Values &candidate);
+    bool replace(const Values &candidate, bool forcePersist = false);
     bool persist(const Values &candidate);
     void load();
     void fail(const QString &message);
@@ -83,6 +83,7 @@ private:
     std::unique_ptr<Values> m_values;
     QString m_storagePath;
     QString m_lastError;
+    QByteArray m_revisionDigest;
 };
 
 } // namespace precision::preferences
