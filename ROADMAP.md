@@ -3,7 +3,7 @@
 Checked items require implementation and verification. Intermediate builds are not completion of the professional suite.
 
 ## Foundation
-- [x] Construct local unsigned Squirrel.Windows development package with `Setup.exe`, `RELEASES`, and a full `.nupkg` (candidate-bound local package construction only; installer execution and publication remain incomplete)
+- [x] Publish development prerelease `v0.1.0-dev.20260907.1` with unsigned `Setup.exe`, `RELEASES`, and a full `.nupkg` (installer execution, installed-runtime proof, updater behavior, and full release remain incomplete)
 - [ ] Reproducible Windows bootstrap and native build (native build and local Squirrel package route exist; fresh-machine acquisition remains incomplete)
 - [ ] Versioned document model, transactions, undo and redo
 - [ ] Atomic save, exclusive writer protection and crash recovery
