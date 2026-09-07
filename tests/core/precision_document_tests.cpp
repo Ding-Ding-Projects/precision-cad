@@ -1,4 +1,5 @@
 #include "precision_document.h"
+#include "model_evaluator.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -7,6 +8,7 @@
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 
 using namespace precision::core;
@@ -14,6 +16,8 @@ using namespace precision::core;
 
 static DocumentRecord initial() { return {kDocumentSchemaVersion, QStringLiteral("doc-0001"), 7, QStringLiteral("mm"), {}}; }
 static Feature feature(QString id, QVector<QString> refs = {}) { return {std::move(id), QStringLiteral("Sketch"), QStringLiteral("Base profile"), std::move(refs), QJsonObject{{QStringLiteral("radius"), 12.5}}, false}; }
+static Feature box(QString id, bool suppressed = false) { return {std::move(id), QStringLiteral("box"), QStringLiteral("Box"), {}, QJsonObject{{QStringLiteral("dx"), 1.0}, {QStringLiteral("dy"), 2.0}, {QStringLiteral("dz"), 3.0}}, suppressed}; }
+static Feature boolean(QString id, QVector<QString> refs) { return {std::move(id), QStringLiteral("union"), QStringLiteral("Union"), std::move(refs), {}, false}; }
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     Document d(initial()); REQUIRE(Document::validate(d.record()).ok); REQUIRE(d.addFeature(feature("a"), 7).ok); const auto afterAdd = d.record().revision;
@@ -28,5 +32,13 @@ int main(int argc, char **argv) {
     QLockFile lock(path + QStringLiteral(".lock")); lock.setStaleLockTime(0); REQUIRE(lock.tryLock()); REQUIRE(!DocumentStorage::save(path, restored, restored.revision).ok); lock.unlock();
     const QString largePath = temp.filePath("large.pcad"); QFile large(largePath); REQUIRE(large.open(QIODevice::WriteOnly)); REQUIRE(large.resize(16 * 1024 * 1024 + 1)); large.close(); REQUIRE(!DocumentStorage::load(largePath, &roundTrip).ok);
     QFile unknown(path); REQUIRE(unknown.open(QIODevice::WriteOnly | QIODevice::Truncate)); REQUIRE(unknown.write("{\"schemaVersion\":2}") > 0); unknown.close(); REQUIRE(!DocumentStorage::save(path, restored, restored.revision).ok);
+
+    DocumentRecord ordered{kDocumentSchemaVersion, QStringLiteral("evaluate-order"), 3, QStringLiteral("mm"), {boolean(QStringLiteral("c"), {QStringLiteral("a"), QStringLiteral("b")}), box(QStringLiteral("a")), box(QStringLiteral("b"))}};
+    const auto evaluation = ModelEvaluator::evaluate(ordered); REQUIRE(evaluation.result.ok); REQUIRE(evaluation.ordered.size() == 3); REQUIRE(evaluation.ordered[0].feature.id == QStringLiteral("a")); REQUIRE(evaluation.ordered[1].feature.id == QStringLiteral("b")); REQUIRE(evaluation.ordered[2].feature.id == QStringLiteral("c"));
+    auto suppressed = ordered; suppressed.features[1].suppressed = true; const auto suppression = ModelEvaluator::evaluate(suppressed); REQUIRE(suppression.result.ok); REQUIRE(suppression.isSuppressed(QStringLiteral("a"))); REQUIRE(!suppression.isSuppressed(QStringLiteral("b"))); REQUIRE(suppression.isSuppressed(QStringLiteral("c"))); REQUIRE(suppression.ordered[2].suppressionSource == QStringLiteral("a"));
+    auto unknownReference = ordered; unknownReference.features[0].inputRefs[1] = QStringLiteral("unknown"); const auto unknownEvaluation = ModelEvaluator::evaluate(unknownReference); REQUIRE(!unknownEvaluation.result.ok); REQUIRE(unknownEvaluation.ordered.isEmpty());
+    auto cycle = ordered; cycle.features[1].inputRefs = {QStringLiteral("c")}; const auto cycleEvaluation = ModelEvaluator::evaluate(cycle); REQUIRE(!cycleEvaluation.result.ok); REQUIRE(cycleEvaluation.ordered.isEmpty());
+    auto invalidSchema = ordered; invalidSchema.features[1].parameters.remove(QStringLiteral("dy")); const auto invalidEvaluation = ModelEvaluator::evaluate(invalidSchema); REQUIRE(!invalidEvaluation.result.ok); REQUIRE(invalidEvaluation.ordered.isEmpty());
+    Document rollback(DocumentRecord{kDocumentSchemaVersion, QStringLiteral("rollback"), 0, QStringLiteral("mm"), {box(QStringLiteral("valid"))}}); auto invalidFeature = box(QStringLiteral("invalid")); invalidFeature.parameters.insert(QStringLiteral("dx"), std::numeric_limits<double>::infinity()); REQUIRE(!rollback.addFeature(invalidFeature, 0).ok); REQUIRE(rollback.record().revision == 0 && rollback.record().features.size() == 1 && rollback.record().features[0].id == QStringLiteral("valid"));
     return 0;
 }
