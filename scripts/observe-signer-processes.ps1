@@ -20,8 +20,10 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Nu
 Write-Audit 'started' @{ source='Win32_ProcessStartTrace'; coverage='all process-start events observed after ready and before terminal' }
 $watcher = [System.Management.ManagementEventWatcher]::new('SELECT * FROM Win32_ProcessStartTrace')
 $mode = 'Win32_ProcessStartTrace'
+$watcherStarted = $false
+$failure = $null
 try {
-    try { $watcher.Start() } catch { $mode = 'Get-Process-polling'; Write-Audit 'observation-limit' @{ reason='Win32_ProcessStartTrace unavailable'; limitation='short-lived processes can escape sampling' } }
+    try { $watcher.Start(); $watcherStarted = $true } catch { $mode = 'Get-Process-polling'; Write-Audit 'observation-limit' @{ reason='Win32_ProcessStartTrace unavailable'; limitation='short-lived processes can escape sampling' } }
     Write-Audit 'ready' @{ watcherStarted=($mode -eq 'Win32_ProcessStartTrace'); mode=$mode }
     Set-Content -LiteralPath $ReadyPath -Value $SessionId -Encoding ascii -NoNewline
     $lastHeartbeat = [DateTimeOffset]::MinValue
@@ -47,10 +49,20 @@ try {
             Start-Sleep -Milliseconds 250
         }
     }
-    Write-Audit 'terminal' @{ healthy=$true; stopRequested=$true; mode=$mode; exhaustive=($mode -eq 'Win32_ProcessStartTrace') }
 } catch {
-    Write-Audit 'terminal' @{ healthy=$false; error=$_.Exception.GetType().FullName }
-    throw
-} finally {
-    if ($null -ne $watcher) { $watcher.Stop(); $watcher.Dispose() }
+    $failure = $_
 }
+$cleanupFailure = $null
+if ($null -ne $watcher) {
+    if ($watcherStarted) {
+        try { $watcher.Stop() } catch { $cleanupFailure = $_ }
+    }
+    try { $watcher.Dispose() } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = $_ } }
+}
+if ($null -ne $failure -or $null -ne $cleanupFailure) {
+    $errorType = if ($null -ne $failure) { $failure.Exception.GetType().FullName } else { $cleanupFailure.Exception.GetType().FullName }
+    Write-Audit 'terminal' @{ healthy=$false; error=$errorType; mode=$mode; exhaustive=($mode -eq 'Win32_ProcessStartTrace') }
+    if ($null -ne $failure) { throw $failure }
+    throw $cleanupFailure
+}
+Write-Audit 'terminal' @{ healthy=$true; stopRequested=$true; mode=$mode; exhaustive=($mode -eq 'Win32_ProcessStartTrace') }
