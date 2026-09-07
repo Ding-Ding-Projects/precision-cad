@@ -49,7 +49,7 @@ public:
             } else if (c.isLetter() || c == u'_') {
                 while (index < m_source.size() && (m_source[index].isLetterOrNumber() || m_source[index] == u'_')) ++index;
             } else ++index;
-            if (lexicalTokens > m_limits.maxTokens) return fail("token_limit", "Expression token limit exceeded.", index - 1);
+            if (lexicalTokens > m_limits.maxTokens) return fail("token_limit", "Expression token limit exceeded.", index - 1, 1);
         }
         skip();
         auto value = expression(0);
