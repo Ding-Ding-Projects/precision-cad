@@ -21,11 +21,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Precision CAD Contributors\0"
             VALUE "FileDescription", "@PRECISION_CAD_FILE_DESCRIPTION@\0"
-            VALUE "FileVersion", "@PRECISION_CAD_VERSION@\0"
+            VALUE "FileVersion", "@PRECISION_CAD_RESOURCE_VERSION@\0"
             VALUE "InternalName", "@PRECISION_CAD_INTERNAL_NAME@\0"
             VALUE "OriginalFilename", "@PRECISION_CAD_ORIGINAL_FILENAME@\0"
             VALUE "ProductName", "Precision CAD\0"
-            VALUE "ProductVersion", "@PRECISION_CAD_VERSION@\0"
+            VALUE "ProductVersion", "@PRECISION_CAD_RESOURCE_VERSION@\0"
         END
     END
     BLOCK "VarFileInfo"

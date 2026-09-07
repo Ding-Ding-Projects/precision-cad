@@ -19,9 +19,10 @@ function Write-Audit([string]$Kind, [hashtable]$Values = @{}) {
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
 Write-Audit 'started' @{ source='Win32_ProcessStartTrace'; coverage='all process-start events observed after ready and before terminal' }
 $watcher = [System.Management.ManagementEventWatcher]::new('SELECT * FROM Win32_ProcessStartTrace')
+$mode = 'Win32_ProcessStartTrace'
 try {
-    $watcher.Start()
-    Write-Audit 'ready' @{ watcherStarted=$true }
+    try { $watcher.Start() } catch { $mode = 'Get-Process-polling'; Write-Audit 'observation-limit' @{ reason='Win32_ProcessStartTrace unavailable'; limitation='short-lived processes can escape sampling' } }
+    Write-Audit 'ready' @{ watcherStarted=($mode -eq 'Win32_ProcessStartTrace'); mode=$mode }
     Set-Content -LiteralPath $ReadyPath -Value $SessionId -Encoding ascii -NoNewline
     $lastHeartbeat = [DateTimeOffset]::MinValue
     while (-not (Test-Path -LiteralPath $StopPath)) {
@@ -29,16 +30,23 @@ try {
             Write-Audit 'heartbeat' @{}
             $lastHeartbeat = [DateTimeOffset]::UtcNow
         }
-        try {
-            $event = $watcher.WaitForNextEvent(250)
-            if ($null -ne $event) {
-                Write-Audit 'process-start' @{ processName=[string]$event['ProcessName']; processId=[uint32]$event['ProcessID']; parentProcessId=[uint32]$event['ParentProcessID'] }
+        if ($mode -eq 'Win32_ProcessStartTrace') {
+            try {
+                $event = $watcher.WaitForNextEvent(250)
+                if ($null -ne $event) {
+                    Write-Audit 'process-start' @{ processName=[string]$event['ProcessName']; processId=[uint32]$event['ProcessID']; parentProcessId=[uint32]$event['ParentProcessID'] }
+                }
+            } catch [System.Management.ManagementException] {
+                if ($_.Exception.Message -notmatch 'timed out') { throw }
             }
-        } catch [System.Management.ManagementException] {
-            if ($_.Exception.Message -notmatch 'timed out') { throw }
+        } else {
+            $processes = @(Get-Process -ErrorAction Stop)
+            Write-Audit 'sample' @{ processCount=$processes.Count }
+            foreach ($process in $processes) { Write-Audit 'process-sample' @{ processName=$process.ProcessName; processId=$process.Id } }
+            Start-Sleep -Milliseconds 250
         }
     }
-    Write-Audit 'terminal' @{ healthy=$true; stopRequested=$true }
+    Write-Audit 'terminal' @{ healthy=$true; stopRequested=$true; mode=$mode; exhaustive=($mode -eq 'Win32_ProcessStartTrace') }
 } catch {
     Write-Audit 'terminal' @{ healthy=$false; error=$_.Exception.GetType().FullName }
     throw

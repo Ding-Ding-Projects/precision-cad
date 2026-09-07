@@ -10,6 +10,6 @@ target_link_libraries(precision_geometry PUBLIC Qt6::Core TKernel TKMath TKG2d T
 set(PRECISION_CAD_FILE_DESCRIPTION "Precision CAD Geometry Worker")
 set(PRECISION_CAD_INTERNAL_NAME "precision_geometry_worker")
 set(PRECISION_CAD_ORIGINAL_FILENAME "precision_geometry_worker.exe")
-configure_file("${CMAKE_SOURCE_DIR}/resources/native-version.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/precision_geometry_worker_version.rc" @ONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/../../resources/native-version.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/precision_geometry_worker_version.rc" @ONLY)
 add_executable(precision_geometry_worker main.cpp "${CMAKE_CURRENT_BINARY_DIR}/precision_geometry_worker_version.rc")
 target_link_libraries(precision_geometry_worker PRIVATE precision_geometry)

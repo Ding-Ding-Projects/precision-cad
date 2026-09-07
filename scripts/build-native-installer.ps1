@@ -25,12 +25,14 @@ function Start-SignerAudit {
     $auditPath = Join-Path $output 'signer-process-audit.jsonl'
     $readyPath = Join-Path $output 'signer-process-audit.ready'
     $stopPath = Join-Path $output 'signer-process-audit.stop'
+    $errorPath = Join-Path $output 'signer-process-observer.stderr.log'
     $sessionId = [Guid]::NewGuid().ToString('N')
     $observer = Join-Path $PSScriptRoot 'observe-signer-processes.ps1'
-    $process = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$observer,'-LogPath',$auditPath,'-ReadyPath',$readyPath,'-StopPath',$stopPath,'-SessionId',$sessionId) -PassThru -WindowStyle Hidden
+    $arguments = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -LogPath "{1}" -ReadyPath "{2}" -StopPath "{3}" -SessionId "{4}"' -f $observer,$auditPath,$readyPath,$stopPath,$sessionId)
+    $process = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardError $errorPath
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
     while ([DateTimeOffset]::UtcNow -lt $deadline -and -not (Test-Path -LiteralPath $readyPath)) {
-        if ($process.HasExited) { throw 'Signer-process observer exited before reporting readiness.' }
+        if ($process.HasExited) { $detail=if(Test-Path -LiteralPath $errorPath){Get-Content -LiteralPath $errorPath -Raw}else{'no stderr output'}; throw "Signer-process observer exited before reporting readiness: $detail" }
         Start-Sleep -Milliseconds 50
     }
     if (-not (Test-Path -LiteralPath $readyPath) -or (Get-Content -LiteralPath $readyPath -Raw) -ne $sessionId) { throw 'Signer-process observer did not complete its readiness handshake.' }
@@ -41,14 +43,14 @@ function Stop-SignerAudit($audit) {
     if (-not $audit.process.WaitForExit(10000)) { throw 'Signer-process observer did not terminate after the package command ended.' }
     if ($audit.process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $audit.path)) { throw 'Signer-process observer did not produce a healthy audit log.' }
     $records = @(Get-Content -LiteralPath $audit.path | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
-    $started = @($records | Where-Object kind -eq 'started'); $ready = @($records | Where-Object kind -eq 'ready'); $heartbeats = @($records | Where-Object kind -eq 'heartbeat'); $events = @($records | Where-Object kind -eq 'process-start'); $terminal = @($records | Where-Object kind -eq 'terminal')
-    if ($started.Count -ne 1 -or $ready.Count -ne 1 -or $heartbeats.Count -lt 1 -or $events.Count -lt 1 -or $terminal.Count -ne 1 -or -not $terminal[0].healthy) { throw 'Signer-process audit coverage is incomplete.' }
+    $started = @($records | Where-Object kind -eq 'started'); $ready = @($records | Where-Object kind -eq 'ready'); $heartbeats = @($records | Where-Object kind -eq 'heartbeat'); $events = @($records | Where-Object kind -eq 'process-start'); $samples = @($records | Where-Object kind -eq 'sample'); $terminal = @($records | Where-Object kind -eq 'terminal')
+    if ($started.Count -ne 1 -or $ready.Count -ne 1 -or $heartbeats.Count -lt 1 -or (($events.Count + $samples.Count) -lt 1) -or $terminal.Count -ne 1 -or -not $terminal[0].healthy) { throw 'Signer-process audit coverage is incomplete.' }
     $previous = [DateTimeOffset]::MinValue
     foreach ($record in $records) { $at=[DateTimeOffset]::Parse([string]$record.at); if ($at -lt $previous -or ($previous -ne [DateTimeOffset]::MinValue -and ($at-$previous).TotalSeconds -gt 5)) { throw 'Signer-process audit contains a timing gap.' }; $previous=$at }
-    foreach ($record in $events | Where-Object { $signerNames -contains ([string]$_.processName).ToLowerInvariant() }) { $observedSignerInvocations.Add($record) }
+    foreach ($record in $records | Where-Object { $_.kind -in @('process-start','process-sample') -and $signerNames -contains ([string]$_.processName).ToLowerInvariant() }) { $observedSignerInvocations.Add($record) }
     if ($observedSignerInvocations.Count -ne 0) { throw 'A signer process was observed during unsigned Squirrel packaging.' }
     Set-ItemProperty -LiteralPath $audit.path -Name IsReadOnly -Value $true
-    return [ordered]@{ path='signer-process-audit.jsonl'; sha256=(Get-FileHash -LiteralPath $audit.path -Algorithm SHA256).Hash.ToLowerInvariant(); coverage=[ordered]@{ source='Win32_ProcessStartTrace'; startedAt=$started[0].at; readyAt=$ready[0].at; endedAt=$terminal[0].at; heartbeatCount=$heartbeats.Count; processStartEventCount=$events.Count; terminalHealthy=$true; gapsOverFiveSeconds=0 }; observerPid=$audit.process.Id }
+    return [ordered]@{ path='signer-process-audit.jsonl'; sha256=(Get-FileHash -LiteralPath $audit.path -Algorithm SHA256).Hash.ToLowerInvariant(); coverage=[ordered]@{ source=$ready[0].mode; exhaustive=[bool]$terminal[0].exhaustive; startedAt=$started[0].at; readyAt=$ready[0].at; endedAt=$terminal[0].at; heartbeatCount=$heartbeats.Count; processStartEventCount=$events.Count; sampleCount=$samples.Count; terminalHealthy=$true; gapsOverFiveSeconds=0 }; observerPid=$audit.process.Id }
 }
 function Get-VerifiedFile([string]$Uri, [string]$Path, [string]$ExpectedHash) {
     if (-not (Test-Path -LiteralPath $Path) -or (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ExpectedHash) {
@@ -132,7 +134,7 @@ foreach ($package in $full) { if ($releaseText -notmatch [regex]::Escape($packag
     if (-not (Test-Path -LiteralPath $runtimeReceiptPath)) { throw 'Native runtime receipt is missing.' }
     $runtimeReceipt = Get-Content -LiteralPath $runtimeReceiptPath -Raw | ConvertFrom-Json
     if ($runtimeReceipt.sourceCommit -ne $head -or $runtimeReceipt.packageVersion -ne $Version -or $runtimeReceipt.architecture -ne 'x64') { throw 'Native runtime receipt does not bind the staged runtime to this package candidate.' }
-    $provenance = [ordered]@{ version=1; sourceCommit=$head; builtAt=[DateTimeOffset]::UtcNow.ToString('o'); buildStartedAt=$buildStartedAt; buildEndedAt=[DateTimeOffset]::UtcNow.ToString('o'); packagingCommand='build-installer.bat /s'; cleanSource=$true; cleanOutput=$true; package=[ordered]@{ id='PrecisionCAD'; version=$Version; architecture='x64' }; buildLog=[ordered]@{ path='installer-build.log'; sha256=(Get-FileHash -LiteralPath $buildLog -Algorithm SHA256).Hash.ToLowerInvariant() }; runtimePayload=$runtimeReceipt.payload; signing=[ordered]@{ mode='unsigned'; inputsCleared=$true; certificateAutoDiscoveryDisabled=$true; processAuditComplete=$true; signerInvocationCount=$observedSignerInvocations.Count; observedSignerInvocations=@($observedSignerInvocations); controls=[ordered]@{ signWithParamsPresent=$false; invocation=@('--releasify=<candidate>','--releaseDir','<output>','--no-msi','--setupIcon','<project-icon>'); knownToolBehavior='Squirrel.Windows signing requires explicit --signWithParams' }; processAudit=$signerAuditEvidence } }
+    $provenance = [ordered]@{ version=1; sourceCommit=$head; builtAt=[DateTimeOffset]::UtcNow.ToString('o'); buildStartedAt=$buildStartedAt; buildEndedAt=[DateTimeOffset]::UtcNow.ToString('o'); packagingCommand='build-installer.bat /s'; cleanSource=$true; cleanOutput=$true; package=[ordered]@{ id='PrecisionCAD'; version=$Version; architecture='x64' }; buildLog=[ordered]@{ path='installer-build.log'; sha256=(Get-FileHash -LiteralPath $buildLog -Algorithm SHA256).Hash.ToLowerInvariant() }; runtimePayload=$runtimeReceipt.payload; signing=[ordered]@{ mode='unsigned'; inputsCleared=$true; certificateAutoDiscoveryDisabled=$true; processAuditComplete=[bool]$signerAuditEvidence.coverage.exhaustive; signerInvocationCount=$observedSignerInvocations.Count; observedSignerInvocations=@($observedSignerInvocations); controls=[ordered]@{ signWithParamsPresent=$false; invocation=@('--releasify=<candidate>','--releaseDir','<output>','--no-msi','--setupIcon','<project-icon>'); knownToolBehavior='Squirrel.Windows signing requires explicit --signWithParams' }; processAudit=$signerAuditEvidence } }
     $provenance | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $output 'squirrel-provenance.json') -Encoding utf8
     $receipt = [ordered]@{ version=1; sourceCommit=$head; packageVersion=$Version; architecture='x64'; provenance='squirrel-provenance.json'; artifacts=[ordered]@{ setup=[ordered]@{name=$setup[0].Name;bytes=$setup[0].Length;sha256=(Get-FileHash $setup[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; releases=[ordered]@{name=$releases[0].Name;bytes=$releases[0].Length;sha256=(Get-FileHash $releases[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; fullPackages=@($full | ForEach-Object { [ordered]@{name=$_.Name;bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} }) } }
     $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $output 'squirrel-artifact-receipt.json') -Encoding utf8

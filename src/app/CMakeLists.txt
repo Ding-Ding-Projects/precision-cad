@@ -4,6 +4,12 @@ endif()
 if(NOT DEFINED PRECISION_CAD_BUILD_TIME)
   set(PRECISION_CAD_BUILD_TIME "unavailable")
 endif()
+if(NOT DEFINED PRECISION_CAD_RESOURCE_VERSION)
+  set(PRECISION_CAD_RESOURCE_VERSION "0.0.0.0")
+endif()
+if(NOT DEFINED PRECISION_CAD_FILE_VERSION_COMMA)
+  set(PRECISION_CAD_FILE_VERSION_COMMA "0,0,0,0")
+endif()
 
 qt_add_executable(precision_cad
   "${CMAKE_CURRENT_BINARY_DIR}/precision_cad_version.rc"
@@ -17,7 +23,7 @@ qt_add_executable(precision_cad
 set(PRECISION_CAD_FILE_DESCRIPTION "Precision CAD")
 set(PRECISION_CAD_INTERNAL_NAME "precision_cad")
 set(PRECISION_CAD_ORIGINAL_FILENAME "precision_cad.exe")
-configure_file("${CMAKE_SOURCE_DIR}/resources/native-version.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/precision_cad_version.rc" @ONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/../../resources/native-version.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/precision_cad_version.rc" @ONLY)
 set_target_properties(precision_cad PROPERTIES AUTOMOC ON AUTORCC ON AUTOUIC ON)
 
 qt_add_qml_module(precision_cad
