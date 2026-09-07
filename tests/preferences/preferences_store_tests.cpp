@@ -15,6 +15,7 @@ using precision::preferences::PreferencesStore;
 class PreferencesStoreTests final : public QObject {
     Q_OBJECT
 private slots:
+ void emptyVocabularyTransitions(); void emptyVocabularyLockedClear();
  void vocabularyWriteRefusal(); void vocabularyStartupRejectsDepth(); void fractionalTone_data(); void fractionalTone(); void settingsDuplicates_data(); void settingsDuplicates(); void deepUnknownFields(); void scannerScopeAndDepth(); void oversizedVocabularyStartup(); void vocabularyReloadPreservesBytes_data(); void vocabularyReloadPreservesBytes(); void vocabularyLockedClear(); void publicExportAllowlist(); void exactBytesPersisted(); void preferencesReadLimits(); void resetStaleAndEvidenceSafety();
  void persistsValidState(); void rejectsInvalidWithoutChange(); void corruptionRetainsDefaults(); void corruptStateRequiresReset(); void resetPreservesCorruptEvidence(); void writerLockPreservesMemory(); void exportOmitsVoiceIds(); void staleWriterRejected(); void vocabularyLoadsAndClears(); void vocabularyRejectsDuplicateDecodedKey(); void vocabularyAllowsSameKeyAcrossObjects(); void vocabularyUsesOriginalTextAndLongestKey(); void boundedAndFractionalInputs();
 };
@@ -172,6 +173,37 @@ void PreferencesStoreTests::vocabularyStartupRejectsDepth() {
  const auto bytes=QByteArray("{\"unknown\":")+QByteArray(20000,'[')+"0"+QByteArray(20000,']')+"}";
  QVERIFY(writeBytes(cache,bytes)); precision::preferences::PersonalVocabularyStore store(cache);
  QVERIFY(!store.loaded()); QCOMPARE(readBytes(cache),bytes);
+}
+void PreferencesStoreTests::emptyVocabularyTransitions() {
+ QTemporaryDir dir; const auto input=dir.filePath("input.json"); const auto cache=dir.filePath("cache.json");
+ const QByteArray empty=R"({"schemaVersion":1,"entries":{}})";
+ QVERIFY(writeBytes(input,empty)); precision::preferences::PersonalVocabularyStore store(cache);
+ QSignalSpy changes(&store,&precision::preferences::PersonalVocabularyStore::loadedChanged);
+ QVERIFY(!store.loaded()); QVERIFY(store.loadFile(input)); QVERIFY(store.loaded()); QCOMPARE(changes.count(),1);
+ QCOMPARE(store.applyPrivateUiText("Widget"),QString("Widget")); QCOMPARE(readBytes(cache),empty);
+ precision::preferences::PersonalVocabularyStore restored(cache); QVERIFY(restored.loaded());
+ QVERIFY(store.loadFile(input)); QCOMPARE(changes.count(),1);
+ QVERIFY(writeBytes(input,validVocabulary)); QVERIFY(store.loadFile(input)); QVERIFY(store.loaded()); QCOMPARE(changes.count(),2);
+ QCOMPARE(store.applyPrivateUiText("Widget"),QString("Fixture"));
+ QVERIFY(writeBytes(input,empty)); QVERIFY(store.loadFile(input)); QVERIFY(store.loaded()); QCOMPARE(changes.count(),3);
+ QCOMPARE(store.applyPrivateUiText("Widget"),QString("Widget"));
+ QVERIFY(store.clear()); QVERIFY(!store.loaded()); QCOMPARE(changes.count(),4); QVERIFY(!QFile::exists(cache));
+ QVERIFY(store.clear()); QCOMPARE(changes.count(),4);
+ precision::preferences::PersonalVocabularyStore afterClear(cache); QVERIFY(!afterClear.loaded());
+}
+void PreferencesStoreTests::emptyVocabularyLockedClear() {
+ QTemporaryDir dir; const auto input=dir.filePath("input.json"); const auto cache=dir.filePath("cache.json");
+ const QByteArray empty=R"({"schemaVersion":1,"entries":{}})";
+ QVERIFY(writeBytes(input,empty)); precision::preferences::PersonalVocabularyStore store(cache); QVERIFY(store.loadFile(input));
+ QSignalSpy changes(&store,&precision::preferences::PersonalVocabularyStore::loadedChanged);
+#ifdef Q_OS_WIN
+ HANDLE handle=CreateFileW(reinterpret_cast<LPCWSTR>(cache.utf16()),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+ QVERIFY(handle!=INVALID_HANDLE_VALUE); const bool cleared=store.clear(); CloseHandle(handle);
+ QVERIFY(!cleared); QVERIFY(store.loaded()); QCOMPARE(changes.count(),0); QCOMPARE(readBytes(cache),empty);
+ QVERIFY(store.clear()); QVERIFY(!store.loaded()); QCOMPARE(changes.count(),1);
+#else
+ QSKIP("This case exercises Windows file sharing denial.");
+#endif
 }
 QTEST_APPLESS_MAIN(PreferencesStoreTests)
 #include "preferences_store_tests.moc"

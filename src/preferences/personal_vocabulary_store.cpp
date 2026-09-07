@@ -23,7 +23,7 @@ QString defaultCachePath() { return QDir(QStandardPaths::writableLocation(QStand
 PersonalVocabularyStore::PersonalVocabularyStore(QString cachePath, QObject *parent) : QObject(parent), m_cachePath(cachePath.isEmpty() ? defaultCachePath() : std::move(cachePath)) {
     QFile cache(m_cachePath); if (cache.exists() && cache.open(QIODevice::ReadOnly)) { const auto bytes=cache.read(kMaxBytes+1); if(cache.error()==QFileDevice::NoError && bytes.size()<=kMaxBytes) loadBytes(bytes, false); }
 }
-bool PersonalVocabularyStore::loaded() const { return !m_entries.isEmpty(); }
+bool PersonalVocabularyStore::loaded() const { return m_loaded; }
 bool PersonalVocabularyStore::loadFile(const QString &userChosenPath) {
     QFile input(userChosenPath);
     if (!input.open(QIODevice::ReadOnly)) { fail("personal vocabulary file was rejected"); return false; }
@@ -41,9 +41,9 @@ bool PersonalVocabularyStore::loadBytes(const QByteArray &bytes, bool persist) {
     QHash<QString,QString> candidate;
     for (auto it=entries.begin(); it!=entries.end(); ++it) { if (unsafe(it.key()) || it.key().size()>256 || !it.value().isString() || it.value().toString().size()>512) { fail("personal vocabulary entry was rejected"); return false; } candidate.insert(it.key(),it.value().toString()); }
     if (persist) { QDir().mkpath(QFileInfo(m_cachePath).absolutePath()); QSaveFile output(m_cachePath); if (!output.open(QIODevice::WriteOnly) || output.write(bytes)!=bytes.size() || !output.commit()) { fail("personal vocabulary cache write failed"); return false; } }
-    const bool changed = m_entries != candidate; m_entries=std::move(candidate); if(changed) emit loadedChanged(); return true;
+    const bool changed = !m_loaded || m_entries != candidate; m_entries=std::move(candidate); m_loaded=true; if(changed) emit loadedChanged(); return true;
 }
-bool PersonalVocabularyStore::clear() { const bool was=loaded(); if (QFile::exists(m_cachePath) && !QFile::remove(m_cachePath)) { fail("personal vocabulary cache could not be cleared"); return false; } m_entries.clear(); if(was) emit loadedChanged(); return true; }
+bool PersonalVocabularyStore::clear() { const bool was=loaded(); if (QFile::exists(m_cachePath) && !QFile::remove(m_cachePath)) { fail("personal vocabulary cache could not be cleared"); return false; } m_entries.clear(); m_loaded=false; if(was) emit loadedChanged(); return true; }
 QString PersonalVocabularyStore::applyPrivateUiText(const QString &text) const {
     QList<QString> keys=m_entries.keys(); std::sort(keys.begin(),keys.end(),[](const QString&a,const QString&b){ return a.size()==b.size()?a<b:a.size()>b.size(); });
     QString output; output.reserve(text.size());

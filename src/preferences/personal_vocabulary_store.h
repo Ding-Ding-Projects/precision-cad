@@ -22,6 +22,7 @@ private:
     void fail(const QString &message);
     QString m_cachePath;
     QHash<QString, QString> m_entries;
+    bool m_loaded = false;
 };
 
 } // namespace precision::preferences
