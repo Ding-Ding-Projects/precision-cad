@@ -56,6 +56,14 @@ ApplicationWindow {
       ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
+  footer: ToolBar { id: provenanceBar; objectName: "provenanceBar"; padding: 8
+    implicitHeight: provenanceText.implicitHeight + topPadding + bottomPadding
+    contentItem: Label { id: provenanceText; objectName: "versionInfo"; width: provenanceBar.availableWidth
+      textFormat: Text.PlainText; wrapMode: Text.Wrap; elide: Text.ElideNone
+      text: root.copy("Version","版本").replace(/\n/g, " / ") + " " + buildVersion + "  ·  " + root.copy("Updated","更新時間").replace(/\n/g, " / ") + " " + buildTime
+      Accessible.role: Accessible.StaticText; Accessible.name: text
+    }
+  }
   FileDialog { id: saveDialog; currentFolder: root.documentFolder; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
   FileDialog { id: openDialog; currentFolder: root.documentFolder; title: root.copy("Open native Precision CAD document","開啟原生精準 CAD 文件"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.open(workspace.localPath(selectedFile)) }
   FileDialog { id: vocabularyDialog; currentFolder: root.documentFolder; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
@@ -194,7 +202,6 @@ ApplicationWindow {
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
         Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
-        Label { objectName: "versionInfo"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
         Label { objectName: "inspectorNotice"; width: parent.width; textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
       }

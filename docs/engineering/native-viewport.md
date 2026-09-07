@@ -27,3 +27,7 @@ The scoped native follow-up uses existing Qt Quick Controls and Qt Quick 3D prim
 ## CAD coordinate convention
 
 Model coordinates use Z up. Top looks down positive Z onto XY, with X to the right and Y toward the top of the screen. Front looks from negative Y with positive Z up. Right looks from positive X with positive Z up. The isometric view is above the positive-X, negative-Y quadrant. A native label beside the view controls identifies the convention. The exact pole basis is computed analytically, so Top and Bottom do not rely on a nearly vertical approximation.
+
+## Persistent build provenance
+
+The initial workspace has a native toolbar footer containing the running version and recorded update time, including the original seconds and timezone. It consumes the same `buildVersion` and `buildTime` context values as before; it never derives either value from launch time. The label wraps inside the available width, has no elision, exposes its complete text to accessibility, and remains outside the scrollable inspector. Focused geometry checks cover 800 × 600, font scale 1.5, English, Cantonese and bilingual copy, and both themes.

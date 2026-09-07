@@ -186,6 +186,22 @@ private slots:
   QCOMPARE(root->property("editTargetId").toString(),QString()); QTRY_VERIFY(!dialog->property("visible").toBool()); QVERIFY(!edit->property("enabled").toBool()); QVERIFY(viewport->property("vertices").toList().isEmpty());
   QVERIFY(QMetaObject::invokeMethod(dialog,"accepted")); QCOMPARE(workspace.updateCount,1);
  }
+ void provenanceRemainsVisibleAtMinimumSize() {
+  QTemporaryDir dir;QVERIFY(dir.isValid());precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));precision::preferences::PersonalVocabularyStore vocab(dir.filePath("vocab.json"));WorkspaceController workspace;UiText ui(&prefs,&vocab);QQmlEngine engine;
+  const QString version="0.1.0-dev.91.f29406b",time="2026-09-07 17:49:39 Eastern Daylight Time";
+  auto context=engine.rootContext();context->setContextProperty("preferences",&prefs);context->setContextProperty("vocabulary",&vocab);context->setContextProperty("workspace",&workspace);context->setContextProperty("uiText",&ui);context->setContextProperty("buildVersion",version);context->setContextProperty("buildTime",time);
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH)));QVERIFY2(component.isReady(),qPrintable(component.errorString()));std::unique_ptr<QObject> root(component.create());QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
+  auto *window=qobject_cast<QQuickWindow*>(root.get());QVERIFY(window);auto *footer=root->findChild<QQuickItem*>("provenanceBar");auto *text=root->findChild<QQuickItem*>("versionInfo");auto *split=root->findChild<QQuickItem*>("workspaceSplit");QVERIFY(footer);QVERIFY(text);QVERIFY(split);
+  QVERIFY(prefs.setFontScale(1.5));window->resize(800,600);window->show();
+  for(const auto &language:QStringList{"en","yue","both"})for(const auto &theme:QStringList{"light","dark"}) {
+    QVERIFY(prefs.setLanguageMode(language));QVERIFY(prefs.setTheme(theme));QCoreApplication::processEvents();QTest::qWait(20);QCoreApplication::processEvents();
+    const auto rect=text->mapRectToScene(text->boundingRect()),barRect=footer->mapRectToScene(footer->boundingRect()),workspaceRect=split->mapRectToScene(split->boundingRect());
+    QVERIFY(text->isVisible());QVERIFY(rect.left()>=0);QVERIFY(rect.right()<=window->width()+.1);QVERIFY(rect.top()>=0);QVERIFY(rect.bottom()<=window->height()+.1);
+    QVERIFY(rect.height()>=text->property("contentHeight").toDouble()-.1);QVERIFY(rect.width()>=text->property("contentWidth").toDouble()-.1);
+    QVERIFY(workspaceRect.bottom()<=barRect.top()+.1);QVERIFY(barRect.bottom()<=window->height()+.1);
+    const auto value=text->property("text").toString();QVERIFY(value.contains(version));QVERIFY(value.contains(time));QQmlExpression accessible(qmlContext(text),text,"Accessible.name");QCOMPARE(accessible.evaluate().toString(),value);
+  }
+ }
  void surfaceBindings() {
   QTemporaryDir dir; QVERIFY(dir.isValid());
   precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));
