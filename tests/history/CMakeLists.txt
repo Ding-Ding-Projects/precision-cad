@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.21)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Test)
+qt_add_executable(precision_history_tests local_history_service_test.cpp)
+target_compile_features(precision_history_tests PRIVATE cxx_std_20)
+target_link_libraries(precision_history_tests PRIVATE precision_history Qt6::Core Qt6::Test)
+add_test(NAME precision_history_tests COMMAND precision_history_tests)
