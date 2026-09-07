@@ -10,6 +10,7 @@
 #include <QStandardPaths>
 #include <QSet>
 #include <QRegularExpression>
+#include <algorithm>
 
 namespace precision::preferences {
 namespace {
@@ -26,13 +27,14 @@ bool duplicateDecodedKeys(const QByteArray &bytes) {
 }
 }
 PersonalVocabularyStore::PersonalVocabularyStore(QString cachePath, QObject *parent) : QObject(parent), m_cachePath(cachePath.isEmpty() ? defaultCachePath() : std::move(cachePath)) {
-    QFile cache(m_cachePath); if (cache.exists() && cache.open(QIODevice::ReadOnly) && cache.size() <= kMaxBytes) loadBytes(cache.readAll(), false);
+    QFile cache(m_cachePath); if (cache.exists() && cache.open(QIODevice::ReadOnly)) { const auto bytes=cache.read(kMaxBytes+1); if(bytes.size()<=kMaxBytes) loadBytes(bytes, false); }
 }
 bool PersonalVocabularyStore::loaded() const { return !m_entries.isEmpty(); }
 bool PersonalVocabularyStore::loadFile(const QString &userChosenPath) {
     QFile input(userChosenPath);
-    if (!input.open(QIODevice::ReadOnly) || input.size() > kMaxBytes) { fail("personal vocabulary file was rejected"); return false; }
-    return loadBytes(input.readAll(), true);
+    if (!input.open(QIODevice::ReadOnly)) { fail("personal vocabulary file was rejected"); return false; }
+    const auto bytes=input.read(kMaxBytes+1); if(bytes.size()>kMaxBytes) { fail("personal vocabulary file was rejected"); return false; }
+    return loadBytes(bytes, true);
 }
 bool PersonalVocabularyStore::loadBytes(const QByteArray &bytes, bool persist) {
     if (duplicateDecodedKeys(bytes)) { fail("personal vocabulary duplicate keys were rejected"); return false; }
@@ -47,6 +49,12 @@ bool PersonalVocabularyStore::loadBytes(const QByteArray &bytes, bool persist) {
     const bool changed = m_entries != candidate; m_entries=std::move(candidate); if(changed) emit loadedChanged(); return true;
 }
 bool PersonalVocabularyStore::clear() { const bool was=loaded(); if (QFile::exists(m_cachePath) && !QFile::remove(m_cachePath)) { fail("personal vocabulary cache could not be cleared"); return false; } m_entries.clear(); if(was) emit loadedChanged(); return true; }
-QString PersonalVocabularyStore::applyPrivateUiText(const QString &text) const { QString result=text; for(auto it=m_entries.cbegin();it!=m_entries.cend();++it) result.replace(it.key(),it.value()); return result; }
+QString PersonalVocabularyStore::applyPrivateUiText(const QString &text) const {
+    QList<QString> keys=m_entries.keys(); std::sort(keys.begin(),keys.end(),[](const QString&a,const QString&b){ return a.size()==b.size()?a<b:a.size()>b.size(); });
+    QString output; output.reserve(text.size());
+    const QStringView source(text);
+    for (qsizetype i=0;i<text.size();) { const QString *match=nullptr; for(const auto &key:keys) if(source.mid(i,key.size())==key) { match=&key; break; } if(match) { output+=m_entries.value(*match); i+=match->size(); } else output+=text.at(i++); }
+    return output;
+}
 void PersonalVocabularyStore::fail(const QString &message) { emit errorOccurred(message); }
 } // namespace precision::preferences
