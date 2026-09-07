@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.22)
+project(precision_cad_preferences_tests LANGUAGES CXX)
+enable_testing()
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Test)
+if(NOT TARGET precision_cad_preferences)
+    add_subdirectory(../../src/preferences preferences-library)
+endif()
+qt_add_executable(preferences_store_tests preferences_store_tests.cpp)
+target_link_libraries(preferences_store_tests PRIVATE precision_cad_preferences Qt6::Core Qt6::Test)
+add_test(NAME preferences_store_tests COMMAND preferences_store_tests)
+
+if(WIN32)
+    set_tests_properties(preferences_store_tests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+endif()
