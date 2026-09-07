@@ -12,6 +12,33 @@ if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$') { throw 'Could not
 if (git -C $root status --porcelain) { throw 'Installer packaging requires an unchanged committed source tree.' }
 if (-not $Version) { $Version = (Select-String -LiteralPath (Join-Path $root 'CMakeLists.txt') -Pattern '^project\(PrecisionCAD VERSION ([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1).Matches[0].Groups[1].Value }
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Installer version '$Version' must be numeric semantic version text." }
+$buildStartedAt = [DateTimeOffset]::UtcNow.ToString('o')
+$candidateShort = $head.Substring(0, 12)
+$output = Join-Path $root ("artifacts/native/squirrel-windows/" + $candidateShort)
+$buildLog = Join-Path $output 'installer-build.log'
+$signerNames = @('signtool','signtool.exe','azuresigntool','azuresigntool.exe')
+$observedSignerInvocations = [Collections.Generic.List[object]]::new()
+function Start-SignerAudit {
+    $auditPath = Join-Path $output 'signer-process-audit.jsonl'
+    $job = Start-Job -ArgumentList $auditPath,$signerNames -ScriptBlock {
+        param($path,$names)
+        while ($true) {
+            Get-Process -ErrorAction SilentlyContinue | Where-Object { $names -contains $_.ProcessName.ToLowerInvariant() } | ForEach-Object {
+                [ordered]@{ observedAt=[DateTimeOffset]::UtcNow.ToString('o'); processName=$_.ProcessName; processId=$_.Id } | ConvertTo-Json -Compress | Add-Content -LiteralPath $path -Encoding utf8
+            }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    return [ordered]@{ job=$job; path=$auditPath }
+}
+function Stop-SignerAudit($audit) {
+    Stop-Job -Job $audit.job -ErrorAction Stop
+    Receive-Job -Job $audit.job -ErrorAction Stop | Out-Null
+    Remove-Job -Job $audit.job -Force -ErrorAction Stop
+    if (Test-Path -LiteralPath $audit.path) {
+        Get-Content -LiteralPath $audit.path | Where-Object { $_ } | ForEach-Object { $observedSignerInvocations.Add(($_ | ConvertFrom-Json)) }
+    }
+}
 
 function Get-VerifiedFile([string]$Uri, [string]$Path, [string]$ExpectedHash) {
     if (-not (Test-Path -LiteralPath $Path) -or (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ExpectedHash) {
@@ -35,18 +62,22 @@ $nugetRoot = Join-Path $toolchain ("nuget-" + $manifest.nuget.version)
 New-Item -ItemType Directory -Force -Path $nugetRoot | Out-Null
 $nuget = Get-VerifiedFile $manifest.nuget.url (Join-Path $nugetRoot 'nuget.exe') $manifest.nuget.sha256
 
-& (Join-Path $PSScriptRoot 'build-native.ps1')
-if ($LASTEXITCODE -ne 0) { throw "Native build failed with exit code $LASTEXITCODE." }
-& (Join-Path $PSScriptRoot 'stage-native-runtime.ps1')
-if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed with exit code $LASTEXITCODE." }
-
-$staged = Join-Path $root 'build/native/bin'
-$candidateShort = $head.Substring(0, 12)
-$output = Join-Path $root ("artifacts/native/squirrel-windows/" + $candidateShort)
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $root 'artifacts/native/squirrel-windows')) + [IO.Path]::DirectorySeparatorChar
 if (-not ([IO.Path]::GetFullPath($output) + [IO.Path]::DirectorySeparatorChar).StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer output must remain inside the task-owned artifacts directory.' }
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
+$transcribing = $false
+try {
+    Start-Transcript -LiteralPath $buildLog -Force | Out-Null; $transcribing = $true
+    $env:SQUIRREL_ENABLE_SIGNING = $null
+    $env:SQUIRREL_SIGNTOOL = $null
+    $env:SQUIRREL_CERTIFICATE_PATH = $null
+    & (Join-Path $PSScriptRoot 'build-native.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "Native build failed with exit code $LASTEXITCODE." }
+    & (Join-Path $PSScriptRoot 'stage-native-runtime.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed with exit code $LASTEXITCODE." }
+
+$staged = Join-Path $root 'build/native/bin'
 $packageRoot = Join-Path $root ("build/native/squirrel-package/" + $candidateShort)
 $packageRootGuard = [IO.Path]::GetFullPath((Join-Path $root 'build/native/squirrel-package')) + [IO.Path]::DirectorySeparatorChar
 if (-not ([IO.Path]::GetFullPath($packageRoot) + [IO.Path]::DirectorySeparatorChar).StartsWith($packageRootGuard, [StringComparison]::OrdinalIgnoreCase)) { throw 'Squirrel package workspace must remain inside the task-owned build directory.' }
@@ -75,9 +106,11 @@ $nuspec = Join-Path $packageRoot 'PrecisionCAD.nuspec'
 if ($LASTEXITCODE -ne 0) { throw 'NuGet package construction failed.' }
 $nupkg = Join-Path $packageRoot ("PrecisionCAD.$Version.nupkg")
 if (-not (Test-Path -LiteralPath $nupkg)) { throw 'NuGet package construction did not produce the expected input package.' }
+$signerAudit = Start-SignerAudit
 Push-Location $output
-try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi } finally { Pop-Location }
+try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi } finally { Pop-Location; Stop-SignerAudit $signerAudit }
 if ($LASTEXITCODE -ne 0) { throw "Squirrel.Windows releasify failed with exit code $LASTEXITCODE." }
+if ($observedSignerInvocations.Count -ne 0) { throw 'A signer process was observed during unsigned Squirrel packaging.' }
 $setup = @(Get-ChildItem -LiteralPath $output -File -Filter 'Setup.exe')
 $releases = @(Get-ChildItem -LiteralPath $output -File -Filter 'RELEASES')
 $full = @(Get-ChildItem -LiteralPath $output -File -Filter '*-full.nupkg')
@@ -85,7 +118,17 @@ if ($setup.Count -ne 1 -or $releases.Count -ne 1 -or $full.Count -lt 1) { throw 
 if ((Get-AuthenticodeSignature -LiteralPath $setup[0].FullName).Status -ne 'NotSigned') { throw 'Setup.exe must be unsigned for this development release.' }
 $releaseText = Get-Content -Raw -LiteralPath $releases[0].FullName
 foreach ($package in $full) { if ($releaseText -notmatch [regex]::Escape($package.Name)) { throw "RELEASES does not reference $($package.Name)." } }
-$receipt = [ordered]@{ schemaVersion=1; sourceCommit=$head; version=$Version; packagingCommand='build-installer.bat /s'; signing='unsigned'; artifacts=[ordered]@{ setup=[ordered]@{name=$setup[0].Name;bytes=$setup[0].Length;sha256=(Get-FileHash $setup[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; releases=[ordered]@{name=$releases[0].Name;bytes=$releases[0].Length;sha256=(Get-FileHash $releases[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; fullPackages=@($full | ForEach-Object { [ordered]@{name=$_.Name;bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} }) } }
-$receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $output 'squirrel-artifact-receipt.json') -Encoding utf8
+    if ($transcribing) { Stop-Transcript | Out-Null; $transcribing = $false }
+    $runtimeReceiptPath = Join-Path $root 'build/native/runtime-receipt.json'
+    if (-not (Test-Path -LiteralPath $runtimeReceiptPath)) { throw 'Native runtime receipt is missing.' }
+    $runtimeReceipt = Get-Content -LiteralPath $runtimeReceiptPath -Raw | ConvertFrom-Json
+    if ($runtimeReceipt.sourceCommit -ne $head -or $runtimeReceipt.packageVersion -ne $Version -or $runtimeReceipt.architecture -ne 'x64') { throw 'Native runtime receipt does not bind the staged runtime to this package candidate.' }
+    $provenance = [ordered]@{ version=1; sourceCommit=$head; builtAt=[DateTimeOffset]::UtcNow.ToString('o'); buildStartedAt=$buildStartedAt; buildEndedAt=[DateTimeOffset]::UtcNow.ToString('o'); packagingCommand='build-installer.bat /s'; cleanSource=$true; cleanOutput=$true; package=[ordered]@{ id='PrecisionCAD'; version=$Version; architecture='x64' }; buildLog=[ordered]@{ path='installer-build.log'; sha256=(Get-FileHash -LiteralPath $buildLog -Algorithm SHA256).Hash.ToLowerInvariant() }; runtimePayload=$runtimeReceipt.payload; signing=[ordered]@{ mode='unsigned'; inputsCleared=$true; certificateAutoDiscoveryDisabled=$true; processAuditComplete=$true; signerInvocationCount=$observedSignerInvocations.Count; observedSignerInvocations=@($observedSignerInvocations); controls=[ordered]@{ forceCodeSigning=$false; signExecutable=$false; signAndEditExecutable=$false }; auditPath='signer-process-audit.jsonl' } }
+    $provenance | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $output 'squirrel-provenance.json') -Encoding utf8
+    $receipt = [ordered]@{ version=1; sourceCommit=$head; packageVersion=$Version; architecture='x64'; provenance='squirrel-provenance.json'; artifacts=[ordered]@{ setup=[ordered]@{name=$setup[0].Name;bytes=$setup[0].Length;sha256=(Get-FileHash $setup[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; releases=[ordered]@{name=$releases[0].Name;bytes=$releases[0].Length;sha256=(Get-FileHash $releases[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()}; fullPackages=@($full | ForEach-Object { [ordered]@{name=$_.Name;bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()} }) } }
+    $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $output 'squirrel-artifact-receipt.json') -Encoding utf8
 Get-ChildItem -LiteralPath $output -File | Sort-Object Name | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } | Set-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
 Write-Output "Unsigned Squirrel.Windows installer artifacts: $output"
+} finally {
+    if ($transcribing) { Stop-Transcript | Out-Null }
+}
