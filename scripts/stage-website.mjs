@@ -1,7 +1,9 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 const root=resolve(import.meta.dirname,'..');
-const source=resolve(root,'website/dist/client');
+const basePath=process.env.PUBLIC_BASE_PATH || '';
+if(basePath && !/^\/[a-zA-Z0-9_-]+$/.test(basePath))throw new Error('Invalid public base path');
+const source=resolve(root,'website/dist/client',basePath.slice(1));
 const target=resolve(root,'dist');
 if(!existsSync(resolve(source,'index.html')))throw new Error('Missing exported website index.html');
 if(relative(root,target)!=='dist')throw new Error('Invalid staging destination');
