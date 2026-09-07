@@ -10,6 +10,19 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   add_subdirectory("${APP_SOURCE_ROOT}/src/app" app)
 endif()
 find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+qt_add_executable(tst_native_diagnostics
+  tst_native_diagnostics.cpp
+  "${APP_SOURCE_ROOT}/src/app/native_diagnostics.cpp"
+  "${APP_SOURCE_ROOT}/src/app/native_diagnostics.h")
+set_target_properties(tst_native_diagnostics PROPERTIES AUTOMOC ON WIN32_EXECUTABLE OFF)
+target_compile_definitions(tst_native_diagnostics PRIVATE PRECISION_DIAGNOSTICS_TESTING)
+target_link_libraries(tst_native_diagnostics PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
+if(WIN32)
+  target_link_libraries(tst_native_diagnostics PRIVATE advapi32)
+endif()
+target_include_directories(tst_native_diagnostics PRIVATE "${APP_SOURCE_ROOT}/src/app")
+add_test(NAME native-diagnostics COMMAND tst_native_diagnostics -o "${CMAKE_CURRENT_BINARY_DIR}/native-diagnostics.txt,txt")
+set_tests_properties(native-diagnostics PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 qt_add_executable(tst_viewport_math
   tst_viewport_math.cpp
   "${APP_SOURCE_ROOT}/src/app/viewport/viewport_camera.cpp"
