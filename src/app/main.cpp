@@ -11,6 +11,7 @@
 #include "mesh_canvas.h"
 #include "preferences_store.h"
 #include "personal_vocabulary_store.h"
+#include "layout_audit.h"
 
 int main(int argc, char *argv[]) {
   QGuiApplication app(argc, argv); app.setApplicationName(QStringLiteral("Precision CAD")); app.setOrganizationName(QStringLiteral("Precision CAD")); app.setApplicationVersion(QStringLiteral(PRECISION_CAD_VERSION));
@@ -24,5 +25,11 @@ int main(int argc, char *argv[]) {
   const QString documentFolder = profile.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) : QDir(profile).filePath(QStringLiteral("documents"));
   if (!profile.isEmpty() && !QDir().mkpath(documentFolder)) return 2;
   engine.rootContext()->setContextProperty("initialDocumentFolder", QUrl::fromLocalFile(documentFolder));
-  engine.loadFromModule("PrecisionCad", "Main"); if(engine.rootObjects().isEmpty()) return 1; return app.exec();
+  engine.loadFromModule("PrecisionCad", "Main"); if(engine.rootObjects().isEmpty()) return 1;
+  if(qEnvironmentVariableIsSet("PRECISION_LAYOUT_AUDIT")) {
+    if(profile.isEmpty())return 2;
+    auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());if(!window)return 2;
+    startLayoutAudit(window,QDir(profile).filePath(QStringLiteral("layout-audit.json")));
+  }
+  return app.exec();
 }

@@ -33,8 +33,9 @@ ApplicationWindow {
   function perform(action) { if(action === "new") workspace.newDocument(); else if(action === "open") openDialog.open(); else if(action === "close") { allowClose=true; root.close() } }
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
+    objectName: "mainToolbar"
     implicitHeight: children[0].implicitHeight + 16
-    Flow { width: parent.width; padding: 8; spacing: 8
+    Flow { objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
       Label { textFormat: Text.PlainText; text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
       Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
       Button { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
@@ -111,9 +112,9 @@ ApplicationWindow {
       TextField { id: height; text: "45"; validator: DoubleValidator { bottom: 0.001 } }
     }
   }
-  SplitView { anchors.fill: parent
-    Pane { SplitView.preferredWidth: 310
-      Column { anchors.fill: parent; spacing: 8
+  SplitView { objectName: "workspaceSplit"; anchors.fill: parent
+    Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
+      Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
         Label { textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
         ListView { id: tree; width: parent.width; height: parent.height - 170; model: workspace.features; clip: true
           delegate: ItemDelegate { width: tree.width; highlighted: root.selectedLeft === modelData.id || root.selectedRight === modelData.id
@@ -138,8 +139,8 @@ ApplicationWindow {
         }
       }
     }
-    Pane { SplitView.preferredWidth: 290
-      Column { anchors.fill: parent; spacing: 10
+    Pane { objectName: "inspectorPane"; SplitView.preferredWidth: 290
+      Column { objectName: "inspectorColumn"; anchors.fill: parent; spacing: 10
         Label { textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18 }
         Label { textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
         Label { objectName: "rawDiagnostics"; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }

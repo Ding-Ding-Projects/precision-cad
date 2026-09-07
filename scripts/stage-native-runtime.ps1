@@ -24,14 +24,15 @@ foreach ($file in @($app,$worker,$dumpbin,(Join-Path $qtBin 'windeployqt.exe')))
 $provenance = Get-Content (Join-Path $buildRoot 'build-provenance.json') -Raw | ConvertFrom-Json
 $head = (git -C $root rev-parse --verify HEAD).Trim()
 if ($provenance.sourceCommit -ne $head -or (git -C $root status --porcelain)) { throw 'The native runtime must be staged from its unchanged committed source.' }
-& (Join-Path $qtBin 'windeployqt.exe') --release --qmldir (Join-Path $root 'src/app') --dir $destination $app
+& (Join-Path $qtBin 'windeployqt.exe') --force --release --qmldir (Join-Path $root 'src/app') --dir $destination $app
 if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed.' }
 $manifest = Get-Content (Join-Path $root 'manifests/native-dependencies.json') -Raw | ConvertFrom-Json
 $occtCache = Join-Path $env:LOCALAPPDATA ('precision-cad-toolchain/occt-' + $manifest.occt.version)
-$searchDirectories = @($destination,(Join-Path $occtCache ($manifest.occt.root + '/win64/vc14/bin')),$qtBin)
+$searchDirectories = @((Join-Path $occtCache ($manifest.occt.root + '/win64/vc14/bin')),$qtBin)
 foreach ($relative in $manifest.occtSupport.requiredRuntimeDlls) {
     $searchDirectories += Split-Path -Parent (Join-Path $occtCache ('supporting/unpacked/' + $manifest.occtSupport.root + '/' + $relative))
 }
+$searchDirectories += $destination
 $queue = [Collections.Generic.Queue[string]]::new()
 $queue.Enqueue($app); $queue.Enqueue($worker)
 $visited = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
