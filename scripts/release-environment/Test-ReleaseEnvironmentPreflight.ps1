@@ -37,12 +37,16 @@ $capability = [ordered]@{
     feature=$featureProbe
     existingTargetVm=$null
 }
-if ($vmProbe.available) { $capability.existingTargetVm=@($vmProbe.value | Where-Object Name -eq $VmName | Select-Object -First 1) }
+if ($vmProbe.available) {
+    $existing=@($vmProbe.value | Where-Object Name -eq $VmName | Select-Object -First 1)
+    if ($existing.Count -eq 1) { $capability.existingTargetVm=$existing[0] }
+}
 
 $blockers=[Collections.Generic.List[string]]::new()
 if (-not $capability.hyperVModulePresent -or -not $capability.newVmCommandPresent) { $blockers.Add('Hyper-V management commands are unavailable.') }
 if (-not $vmProbe.available) { $blockers.Add('Hyper-V inventory could not be read: ' + $vmProbe.failure.kind + '.') }
 if (-not $featureProbe.available) { $blockers.Add('Hyper-V feature state could not be read: ' + $featureProbe.failure.kind + '.') }
+if ($featureProbe.available -and $featureProbe.value.State -ne 'Enabled') { $blockers.Add('The Hyper-V feature is not enabled.') }
 if (-not $baseImage.exists) { $blockers.Add('An explicit approved base image is required.') }
 if ($null -ne $capability.existingTargetVm) { $blockers.Add('The requested task-owned virtual machine name already exists and will not be replaced.') }
 $receipt=[ordered]@{

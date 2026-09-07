@@ -30,7 +30,19 @@ The base image is an external licensed input. This repository neither downloads 
 
 ## Guest execution and receipts
 
-After the guest has been prepared by the approved provisioning route, stage a candidate Squirrel output directory and invoke `Invoke-GuestReleaseVerification.ps1` with the task-owned VM name, protected credential object, guest script, artifact directory, and output receipt path. The guest route is intentionally receipt-first. It records the setup hash, isolation facts, attempted installation and launch states, and a reserved deterministic prior/candidate updater feed section.
+After the guest has been prepared by the approved provisioning route, use its receipt together with a protected credential object. The host revalidates the created VM ID, Generation 2, VM path, VHD hash, switch identity, processor count, and a running state before it copies any candidate files. It creates a fresh GUID-named guest staging directory, never reuses `C:\ReleaseVerification`, and copies the receipt back before declaring the blocked result.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-environment/Invoke-GuestReleaseVerification.ps1 `
+  -VmName PrecisionCAD-ReleaseVerification `
+  -Credential $approvedCredential `
+  -ProvisioningReceiptPath artifacts/release-environment/provisioning-receipt.json `
+  -GuestScriptPath scripts/release-environment/Invoke-GuestVerification.ps1 `
+  -GuestArtifactDirectory artifacts/native/squirrel-windows/<candidate> `
+  -GuestReceiptPath artifacts/release-environment/runtime-receipt.json
+```
+
+The guest route is intentionally receipt-first. It records the setup hash, isolation facts, attempted installation and launch states, and a reserved deterministic prior/candidate updater feed section.
 
 The updater section remains unverified until the native updater exists and a credential-free deterministic HTTPS feed serves the ordered prior and candidate artifacts. A full future receipt must contain observed `available`, `downloading`, and `ready-to-restart` states, package-hash validation, a release-note link, the unsigned warning, and explicit restart or later actions.
 
