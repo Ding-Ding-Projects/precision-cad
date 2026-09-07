@@ -26,6 +26,17 @@
 #include <QProcessEnvironment>
 #include <QTimer>
 
+#include <vector>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <aclapi.h>
+#include <sddl.h>
+#endif
+
 using namespace precision::update;
 
 namespace {
@@ -162,9 +173,10 @@ class UpdateServiceTest final : public QObject {
   Q_OBJECT
 
   static UpdateConfig config(const QTemporaryDir &dir) {
+    Q_UNUSED(dir);
     return {QStringLiteral("0.1.0"),
             QUrl(QStringLiteral("https://updates.example.test/release/metadata.json")),
-            dir.filePath("staging"), 1};
+            1};
   }
 
   static QString executablePath(const QTemporaryDir &dir) {
@@ -205,14 +217,113 @@ class UpdateServiceTest final : public QObject {
     transport->responses.insert(packageUrl.toString(), {200, packageUrl, {package}, {}});
   }
 
-  static QString singleStageDir(const UpdateConfig &cfg) {
-    const auto children = QDir(cfg.stagingDirectory).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    return children.size() == 1 ? QDir(cfg.stagingDirectory).filePath(children.constFirst()) : QString{};
+  static QString stagingRoot(const QTemporaryDir &dir) { return dir.filePath("private-stage-parent/staging"); }
+
+  static QString singleStageDir(const QTemporaryDir &dir) {
+    const QDir root(stagingRoot(dir));
+    const auto children = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    return children.size() == 1 ? root.filePath(children.constFirst()) : QString{};
   }
+
+#ifdef Q_OS_WIN
+  struct LocalMemory {
+    HLOCAL value = nullptr;
+    ~LocalMemory() { if (value) LocalFree(value); }
+  };
+
+  static PSID currentUserSid(std::vector<BYTE> *storage) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return nullptr;
+    DWORD bytes = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+    storage->resize(bytes);
+    const bool ok = bytes && GetTokenInformation(token, TokenUser, storage->data(), bytes, &bytes);
+    CloseHandle(token);
+    return ok ? reinterpret_cast<TOKEN_USER *>(storage->data())->User.Sid : nullptr;
+  }
+
+  static QByteArray securityDescriptor(const QString &path) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    const DWORD result = GetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(const_cast<ushort *>(path.utf16())), SE_FILE_OBJECT,
+      OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, nullptr, &descriptor);
+    LocalMemory owned{descriptor};
+    if (result != ERROR_SUCCESS) return {};
+    LPWSTR text = nullptr;
+    if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(descriptor, SDDL_REVISION_1,
+        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &text, nullptr)) return {};
+    LocalMemory rendered{text};
+    return QString::fromWCharArray(text).toUtf8();
+  }
+
+  static bool strictPrivateAcl(const QString &path) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    PSID owner = nullptr;
+    PACL acl = nullptr;
+    const DWORD result = GetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(const_cast<ushort *>(path.utf16())), SE_FILE_OBJECT,
+      OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, &owner, nullptr, &acl, nullptr, &descriptor);
+    LocalMemory owned{descriptor};
+    std::vector<BYTE> userStorage;
+    PSID user = currentUserSid(&userStorage);
+    BYTE systemStorage[SECURITY_MAX_SID_SIZE]{};
+    DWORD systemBytes = sizeof(systemStorage);
+    if (result != ERROR_SUCCESS || !owner || !acl || !user || !EqualSid(owner, user)
+        || !CreateWellKnownSid(WinLocalSystemSid, nullptr, systemStorage, &systemBytes)) return false;
+    SECURITY_DESCRIPTOR_CONTROL control{};
+    DWORD revision = 0;
+    if (!GetSecurityDescriptorControl(descriptor, &control, &revision) || !(control & SE_DACL_PROTECTED) || acl->AceCount != 2) return false;
+    bool userAce = false, systemAce = false;
+    for (DWORD index = 0; index < acl->AceCount; ++index) {
+      PVOID raw = nullptr;
+      if (!GetAce(acl, index, &raw)) return false;
+      const auto *header = static_cast<ACE_HEADER *>(raw);
+      if (header->AceType != ACCESS_ALLOWED_ACE_TYPE || header->AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)) return false;
+      const auto *ace = static_cast<ACCESS_ALLOWED_ACE *>(raw);
+      PSID sid = const_cast<DWORD *>(&ace->SidStart);
+      if ((ace->Mask & FILE_ALL_ACCESS) != FILE_ALL_ACCESS) return false;
+      if (EqualSid(sid, user)) userAce = true;
+      else if (EqualSid(sid, systemStorage)) systemAce = true;
+      else return false;
+    }
+    return userAce && systemAce;
+  }
+
+  static bool setAcl(const QString &path, const QString &sddl) {
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(reinterpret_cast<LPCWSTR>(sddl.utf16()), SDDL_REVISION_1, &descriptor, nullptr)) return false;
+    LocalMemory owned{descriptor};
+    BOOL present = FALSE, defaulted = FALSE;
+    PACL acl = nullptr;
+    return GetSecurityDescriptorDacl(descriptor, &present, &acl, &defaulted) && present && acl
+      && SetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(const_cast<ushort *>(path.utf16())), SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr, acl, nullptr) == ERROR_SUCCESS;
+  }
+
+  static QString sidSddl() {
+    std::vector<BYTE> storage;
+    PSID user = currentUserSid(&storage);
+    LPWSTR text = nullptr;
+    if (!user || !ConvertSidToStringSidW(user, &text)) return {};
+    LocalMemory owned{text};
+    return QString::fromWCharArray(text);
+  }
+
+  static void configureStaging(UpdateService &service, const QTemporaryDir &dir) {
+    const QString user = sidSddl();
+    QVERIFY(!user.isEmpty());
+    const QString privateAcl = QStringLiteral("D:P(A;OICI;FA;;;%1)(A;OICI;FA;;;SY)").arg(user);
+    QVERIFY(setAcl(dir.path(), privateAcl));
+    QVERIFY(QDir().mkpath(QFileInfo(stagingRoot(dir)).absolutePath()));
+    service.setStagingDirectoryForTesting(stagingRoot(dir));
+  }
+#else
+  static void configureStaging(UpdateService &service, const QTemporaryDir &dir) {
+    service.setStagingDirectoryForTesting(stagingRoot(dir));
+  }
+#endif
 
 private slots:
   void rejectsUntrustedAndDowngradeMetadata() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     UpdateInfo info;
     QString error;
     const auto cfg = config(dir);
@@ -235,9 +346,10 @@ private slots:
   }
 
   void installedDiscoveryRequiresCompleteSquirrelShape() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     auto cfg = config(dir);
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     QVERIFY(!service.isInstalledSquirrelApplication());
     installShape(dir);
@@ -247,7 +359,7 @@ private slots:
   }
 
   void streamsCandidateToUniqueStageAndRequiresApproval() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     installShape(dir);
     auto cfg = config(dir);
     const QByteArray package("candidate-package");
@@ -258,6 +370,7 @@ private slots:
     auto *rawProcess = process.get();
 
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.setTransport(std::move(transport));
     service.setProcess(std::move(process));
@@ -266,8 +379,12 @@ private slots:
     service.checkNow();
     QCOMPARE(service.state(), UpdateState::Ready);
     QCOMPARE(rawTransport->requests.size(), 3);
-    const QString stage = singleStageDir(cfg);
+    const QString stage = singleStageDir(dir);
     QVERIFY(!stage.isEmpty());
+#ifdef Q_OS_WIN
+    QVERIFY2(strictPrivateAcl(stagingRoot(dir)), "The update root must be owner-and-SYSTEM-only with a protected inheritable DACL.");
+    QVERIFY2(strictPrivateAcl(stage), "The update candidate must be owner-and-SYSTEM-only with a protected inheritable DACL.");
+#endif
     QCOMPARE(QFileInfo(stage + "/PrecisionCAD-0.1.1-full.nupkg").size(), package.size());
     QFile stagedManifest(stage + "/RELEASES");
     QVERIFY(stagedManifest.open(QIODevice::ReadOnly));
@@ -303,7 +420,7 @@ private slots:
   }
 
   void manifestOrPackageTamperingRefusesReady() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     installShape(dir);
     auto cfg = config(dir);
     const QByteArray package("candidate-package");
@@ -311,12 +428,14 @@ private slots:
     auto *raw = transport.get();
     seedCandidate(raw, cfg, package, sha1(package) + " PrecisionCAD-0.1.1-full.nupkg " + QByteArray::number(package.size() + 1) + "\n");
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.setTransport(std::move(transport));
     service.checkNow();
     QCOMPARE(service.state(), UpdateState::Error);
 
     UpdateService hashService(cfg);
+    configureStaging(hashService, dir);
     hashService.setExecutablePathForTesting(executablePath(dir));
     auto goodTransport = std::make_unique<FakeTransport>();
     auto *rawGood = goodTransport.get();
@@ -327,8 +446,95 @@ private slots:
     QCOMPARE(hashService.state(), UpdateState::Error);
   }
 
+  void broadExistingStagingAclIsRefusedWithoutMutation() {
+#ifndef Q_OS_WIN
+    QSKIP("This case requires Windows ACL inspection.");
+#else
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
+    installShape(dir);
+    const QString root = stagingRoot(dir);
+    QVERIFY(QDir().mkpath(root));
+    const QString user = sidSddl();
+    QVERIFY(!user.isEmpty());
+    QVERIFY(setAcl(root, QStringLiteral("D:P(A;OICI;FA;;;%1)(A;OICI;FA;;;SY)(A;OICI;FA;;;WD)").arg(user)));
+    const QByteArray before = securityDescriptor(root);
+    QVERIFY(!before.isEmpty());
+    auto cfg = config(dir);
+    auto transport = std::make_unique<FakeTransport>();
+    seedCandidate(transport.get(), cfg, "candidate-package");
+    UpdateService service(cfg);
+    service.setStagingDirectoryForTesting(root);
+    service.setExecutablePathForTesting(executablePath(dir));
+    service.setTransport(std::move(transport));
+    service.checkNow();
+    QCOMPARE(service.state(), UpdateState::Error);
+    QCOMPARE(securityDescriptor(root), before);
+    QVERIFY(QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+#endif
+  }
+
+  void broadParentRefusesBeforeCreatingUpdatesRoot() {
+#ifndef Q_OS_WIN
+    QSKIP("This case requires Windows ACL inspection.");
+#else
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
+    installShape(dir);
+    const QString parent = dir.filePath("broad-parent");
+    QVERIFY(QDir().mkpath(parent));
+    const QString user = sidSddl();
+    QVERIFY(!user.isEmpty());
+    QVERIFY(setAcl(parent, QStringLiteral("D:P(A;OICI;FA;;;%1)(A;OICI;FA;;;SY)(A;OICI;FA;;;WD)").arg(user)));
+    const QByteArray before = securityDescriptor(parent);
+    QVERIFY(!before.isEmpty());
+    const QString root = QDir(parent).filePath("updates");
+    QVERIFY(!QFileInfo::exists(root));
+    auto cfg = config(dir);
+    auto transport = std::make_unique<FakeTransport>();
+    seedCandidate(transport.get(), cfg, "candidate-package");
+    UpdateService service(cfg);
+    service.setStagingDirectoryForTesting(root);
+    service.setExecutablePathForTesting(executablePath(dir));
+    service.setTransport(std::move(transport));
+    service.checkNow();
+    QCOMPARE(service.state(), UpdateState::Error);
+    QVERIFY(!QFileInfo::exists(root));
+    QCOMPARE(securityDescriptor(parent), before);
+#endif
+  }
+
+  void reparseStagingRootIsRefusedWithoutTouchingTarget() {
+#ifndef Q_OS_WIN
+    QSKIP("This case requires a Windows junction fixture.");
+#else
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
+    installShape(dir);
+    const QString target = dir.filePath("junction-target");
+    const QString root = stagingRoot(dir);
+    QVERIFY(QDir().mkpath(target));
+    QVERIFY(QDir().mkpath(QFileInfo(root).absolutePath()));
+    QProcess junction;
+    junction.start(QStringLiteral("cmd.exe"), {QStringLiteral("/c"), QStringLiteral("mklink"), QStringLiteral("/J"),
+      QDir::toNativeSeparators(root), QDir::toNativeSeparators(target)});
+    QVERIFY2(junction.waitForFinished(5000), qPrintable(junction.errorString()));
+    QVERIFY2(junction.exitCode() == 0, junction.readAllStandardError().constData());
+    const QByteArray before = securityDescriptor(target);
+    QVERIFY(!before.isEmpty());
+    auto cfg = config(dir);
+    auto transport = std::make_unique<FakeTransport>();
+    seedCandidate(transport.get(), cfg, "candidate-package");
+    UpdateService service(cfg);
+    service.setStagingDirectoryForTesting(root);
+    service.setExecutablePathForTesting(executablePath(dir));
+    service.setTransport(std::move(transport));
+    service.checkNow();
+    QCOMPARE(service.state(), UpdateState::Error);
+    QCOMPARE(securityDescriptor(target), before);
+    QVERIFY(QDir(target).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+#endif
+  }
+
   void cancellationInvalidatesSlowTransportCompletion() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     installShape(dir);
     auto cfg = config(dir);
     auto transport = std::make_unique<FakeTransport>();
@@ -336,6 +542,7 @@ private slots:
     raw->defer = true;
     raw->responses.insert(cfg.feedUrl.toString(), {200, cfg.feedUrl, {metadata("candidate-package")}, {}});
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.setTransport(std::move(transport));
     service.checkNow();
@@ -348,9 +555,10 @@ private slots:
   }
 
   void standaloneBuildIsHonestUnavailable() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     auto cfg = config(dir);
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.startupCheck();
     QCOMPARE(service.state(), UpdateState::Unavailable);
@@ -364,7 +572,7 @@ private slots:
 
   void refusesStagedMutationAtApproval() {
     QFETCH(QString, target);
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     installShape(dir);
     auto cfg = config(dir);
     auto transport = std::make_unique<FakeTransport>();
@@ -372,6 +580,7 @@ private slots:
     auto process = std::make_unique<FakeProcess>();
     auto *rawProcess = process.get();
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.setTransport(std::move(transport));
     service.setProcess(std::move(process));
@@ -380,7 +589,7 @@ private slots:
     QCOMPARE(service.state(), UpdateState::Ready);
     service.requestInstall();
     const QString id = approvals.takeFirst().at(0).toString();
-    const QString stage = singleStageDir(cfg);
+    const QString stage = singleStageDir(dir);
     QVERIFY(!stage.isEmpty());
     QFile file(QDir(stage).filePath(target));
     QVERIFY(file.open(QIODevice::ReadWrite));
@@ -394,7 +603,7 @@ private slots:
   }
 
   void priorApprovalCannotAuthorizeNewGeneration() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     installShape(dir);
     auto cfg = config(dir);
     auto transport = std::make_unique<FakeTransport>();
@@ -402,19 +611,22 @@ private slots:
     auto process = std::make_unique<FakeProcess>();
     auto *rawProcess = process.get();
     UpdateService service(cfg);
+    configureStaging(service, dir);
     service.setExecutablePathForTesting(executablePath(dir));
     service.setTransport(std::move(transport));
     service.setProcess(std::move(process));
     QSignalSpy approvals(&service, &UpdateService::restartApprovalRequested);
-    service.checkNow(); service.requestInstall();
+    service.checkNow();
+    QCOMPARE(service.state(), UpdateState::Ready);
+    service.requestInstall();
     const QString oldId = approvals.takeFirst().at(0).toString();
-    const QString oldStage = singleStageDir(cfg);
+    const QString oldStage = singleStageDir(dir);
     service.cancel();
     QVERIFY(!QFileInfo::exists(oldStage));
     service.checkNow(); service.requestInstall();
     const QString newId = approvals.takeFirst().at(0).toString();
     QVERIFY(oldId != newId);
-    QVERIFY(oldStage != singleStageDir(cfg));
+    QVERIFY(oldStage != singleStageDir(dir));
     service.approveInstall(oldId, true);
     QCOMPARE(service.state(), UpdateState::AwaitingApproval);
     QVERIFY(!rawProcess->called);
@@ -426,7 +638,7 @@ private slots:
   }
 
   void realProcessReportsExitAndStartFailures() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     for (const int exitCode : {0, 37}) {
       auto process = makeQtUpdateProcess();
       int starts = 0, completions = 0;
@@ -450,7 +662,7 @@ private slots:
   }
 
   void realProcessSurvivesAdapterDestruction() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     const QString marker = dir.filePath("child-completed.txt");
     auto process = makeQtUpdateProcess();
     bool started = false;
@@ -462,7 +674,7 @@ private slots:
   }
 
   void realQtTransportRejectsUntrustedTlsThenAcceptsTrustedTls() {
-    QTemporaryDir dir;
+    QTemporaryDir dir(QDir::home().filePath(".precision-update-test-XXXXXX"));
     const QString keyPath = dir.filePath("key.pem");
     const QString certificatePath = dir.filePath("certificate.pem");
     const QString configPath = dir.filePath("openssl.cnf");

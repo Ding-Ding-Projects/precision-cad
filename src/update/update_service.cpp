@@ -1,4 +1,5 @@
 #include "update_service.h"
+#include "private_staging.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -14,7 +15,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStorageInfo>
-#include <QTemporaryDir>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUuid>
 #include <QVersionNumber>
@@ -290,6 +291,7 @@ QString UpdateService::updateExePath() const {
 }
 bool UpdateService::isInstalledSquirrelApplication() const { return !installedRoot().isEmpty(); }
 void UpdateService::setExecutablePathForTesting(QString path) { if (m_state == UpdateState::Idle) m_testExecutable = std::move(path); }
+void UpdateService::setStagingDirectoryForTesting(QString path) { if (m_state == UpdateState::Idle) m_testStagingDirectory = std::move(path); }
 void UpdateService::setTransport(std::unique_ptr<UpdateTransport> transport) { if (m_state == UpdateState::Idle && transport) m_transport = std::move(transport); }
 void UpdateService::setProcess(std::unique_ptr<UpdateProcess> process) { if (m_state == UpdateState::Idle && process) m_process = std::move(process); }
 void UpdateService::setState(UpdateState state, QString error) { m_state = state; m_error = std::move(error); emit stateChanged(); }
@@ -388,16 +390,18 @@ void UpdateService::fetchReleases() {
     });
 }
 void UpdateService::downloadPackage() {
-  QDir base(m_config.stagingDirectory);
-  if (!base.isAbsolute() || (!base.exists() && !base.mkpath(QStringLiteral("."))) || QFileInfo(base.absolutePath()).isSymLink()) {
-    fail(tr("The private update staging directory could not be created.")); return;
+  const QString applicationData = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+  const QString root = m_testStagingDirectory.isEmpty()
+    ? (applicationData.isEmpty() ? QString{} : QDir(applicationData).filePath(QStringLiteral("updates"))) : m_testStagingDirectory;
+  QDir base(root);
+  if (!staging::prepareRoot(root)) {
+    fail(tr("Update staging requires a local, current-user-owned directory with verified private access permissions.")); return;
   }
   if (QStorageInfo(base.absolutePath()).bytesAvailable() < qMax(m_config.minimumFreeBytes, m_packageBytes * 2)) {
     fail(tr("There is insufficient disk space to stage the update.")); return;
   }
-  m_stage = std::make_unique<QTemporaryDir>(base.filePath(QStringLiteral("candidate-XXXXXX")));
+  m_stage = std::make_unique<staging::Directory>(base.absolutePath());
   if (!m_stage->isValid()) { fail(tr("A unique update staging directory could not be created.")); return; }
-  QFile::setPermissions(m_stage->path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
   m_packageFile = std::make_unique<QSaveFile>(QDir(m_stage->path()).filePath(QFileInfo(m_info.packageUrl.path()).fileName()));
   m_packageFile->setDirectWriteFallback(false);
   if (!m_packageFile->open(QIODevice::WriteOnly)) { fail(tr("The update package could not be staged.")); return; }
@@ -432,7 +436,8 @@ void UpdateService::downloadPackage() {
     });
 }
 bool UpdateService::validateStaged() const {
-  if (!m_stage || !m_stage->isValid() || QFileInfo(m_stage->path()).isSymLink()) return false;
+  if (!m_stage || !m_stage->isValid() || !staging::verifyPrivateDirectory(m_stage->path())
+      || !staging::verifyPrivateDirectory(QFileInfo(m_stage->path()).absolutePath())) return false;
   const QDir stage(m_stage->path());
   if (stage.entryList(QDir::Files | QDir::Hidden | QDir::System).size() != 2
       || stage.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System).size() != 0

@@ -8,10 +8,10 @@
 
 class QNetworkAccessManager;
 class QSaveFile;
-class QTemporaryDir;
 class QCryptographicHash;
 
 namespace precision::update {
+namespace staging { class Directory; }
 enum class UpdateState { Idle, Checking, Available, Downloading, Ready, AwaitingApproval, Starting, Installing, Installed, Error, Unavailable };
 struct UpdateInfo {
   QString version;
@@ -23,7 +23,6 @@ struct UpdateInfo {
 struct UpdateConfig {
   QString currentVersion;
   QUrl feedUrl;
-  QString stagingDirectory;
   qint64 minimumFreeBytes = 64LL * 1024 * 1024;
 };
 struct TransferRequest {
@@ -66,6 +65,7 @@ public:
   [[nodiscard]] bool isInstalledSquirrelApplication() const;
   // Tests simulate an executable location, never an install root. Production uses applicationFilePath().
   void setExecutablePathForTesting(QString path);
+  void setStagingDirectoryForTesting(QString path);
   void setTransport(std::unique_ptr<UpdateTransport> transport);
   void setProcess(std::unique_ptr<UpdateProcess> process);
   Q_INVOKABLE void startupCheck();
@@ -94,13 +94,14 @@ private:
   [[nodiscard]] QString updateExePath() const;
   UpdateConfig m_config;
   QString m_testExecutable;
+  QString m_testStagingDirectory;
   UpdateState m_state = UpdateState::Idle;
   UpdateInfo m_info;
   QString m_error, m_releaseSha1, m_approvalId;
   QByteArray m_metadata, m_releases, m_localRow;
   qint64 m_packageBytes = 0, m_receivedBytes = 0;
   quint64 m_generation = 0, m_approvalGeneration = 0;
-  std::unique_ptr<QTemporaryDir> m_stage;
+  std::unique_ptr<staging::Directory> m_stage;
   std::unique_ptr<QSaveFile> m_packageFile;
   std::unique_ptr<QCryptographicHash> m_sha1, m_sha256;
   std::unique_ptr<UpdateTransport> m_transport;
