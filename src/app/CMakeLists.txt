@@ -4,6 +4,9 @@ endif()
 if(NOT DEFINED PRECISION_CAD_BUILD_TIME)
   set(PRECISION_CAD_BUILD_TIME "unavailable")
 endif()
+if(NOT DEFINED PRECISION_CAD_SOURCE_COMMIT)
+  set(PRECISION_CAD_SOURCE_COMMIT "unavailable")
+endif()
 if(NOT DEFINED PRECISION_CAD_RESOURCE_VERSION)
   set(PRECISION_CAD_RESOURCE_VERSION "0.0.0.0")
 endif()
@@ -14,6 +17,8 @@ endif()
 qt_add_executable(precision_cad
   "${CMAKE_CURRENT_BINARY_DIR}/precision_cad_version.rc"
   main.cpp
+  native_diagnostics.cpp
+  native_diagnostics.h
   ui_text.h
   workspace_controller.cpp
   workspace_controller.h
@@ -49,4 +54,5 @@ target_include_directories(precision_cad PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../
 
 target_compile_definitions(precision_cad PRIVATE
   PRECISION_CAD_VERSION="${PRECISION_CAD_VERSION}"
-  PRECISION_CAD_BUILD_TIME="${PRECISION_CAD_BUILD_TIME}")
+  PRECISION_CAD_BUILD_TIME="${PRECISION_CAD_BUILD_TIME}"
+  PRECISION_CAD_SOURCE_COMMIT="${PRECISION_CAD_SOURCE_COMMIT}")
