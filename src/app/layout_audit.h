@@ -9,6 +9,16 @@
 #include <QSet>
 #include <QTimer>
 #include <functional>
+#include <atomic>
+
+inline std::atomic<int> auditWarningCount{0};
+inline std::atomic<int> auditCriticalCount{0};
+inline void enableLayoutAuditMessages() {
+ qInstallMessageHandler([](QtMsgType type,const QMessageLogContext &,const QString &){
+  if(type==QtWarningMsg)++auditWarningCount;
+  if(type==QtCriticalMsg||type==QtFatalMsg)++auditCriticalCount;
+ });
+}
 
 // Diagnostic geometry only: never serialize text, model data, settings or file paths.
 inline void startLayoutAudit(QQuickWindow *window, const QString &outputPath) {
@@ -27,7 +37,7 @@ inline void startLayoutAudit(QQuickWindow *window, const QString &outputPath) {
 #else
   const QString source=QStringLiteral("unavailable");
 #endif
-  const QJsonObject result{{"version",1},{"kind","qtquick-native-layout"},{"capturedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"sourceCommit",source},{"processId",QCoreApplication::applicationPid()},{"windowHandle",QString::number(static_cast<qulonglong>(window->winId()))},{"viewport",QJsonObject{{"width",window->width()},{"height",window->height()},{"scale",window->devicePixelRatio()}}},{"visitedItems",visited},{"truncated",truncated},{"elements",elements}};
+  const QJsonObject result{{"version",1},{"kind","qtquick-native-layout"},{"capturedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"sourceCommit",source},{"processId",QCoreApplication::applicationPid()},{"windowHandle",QString::number(static_cast<qulonglong>(window->winId()))},{"viewport",QJsonObject{{"width",window->width()},{"height",window->height()},{"scale",window->devicePixelRatio()}}},{"visitedItems",visited},{"truncated",truncated},{"runtime",QJsonObject{{"warningCount",auditWarningCount.load()},{"criticalCount",auditCriticalCount.load()}}},{"elements",elements}};
   QSaveFile file(outputPath); const auto bytes=QJsonDocument(result).toJson(QJsonDocument::Compact);
   if(file.open(QIODevice::WriteOnly)&&file.write(bytes)==bytes.size())file.commit();
  };

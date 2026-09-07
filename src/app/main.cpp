@@ -14,6 +14,7 @@
 #include "layout_audit.h"
 
 int main(int argc, char *argv[]) {
+  if(qEnvironmentVariableIsSet("PRECISION_LAYOUT_AUDIT"))enableLayoutAuditMessages();
   QGuiApplication app(argc, argv); app.setApplicationName(QStringLiteral("Precision CAD")); app.setOrganizationName(QStringLiteral("Precision CAD")); app.setApplicationVersion(QStringLiteral(PRECISION_CAD_VERSION));
   QCommandLineParser parser; parser.addOption({"profile-directory", "Owned profile directory for isolated runs.", "path"}); parser.addOption({"geometry-worker", "Absolute geometry worker executable for developer or test runs.", "path"}); parser.process(app);
   const QString profile=parser.value("profile-directory"); if(!profile.isEmpty()) { QDir().mkpath(profile); qputenv("PRECISION_CAD_PROFILE_DIRECTORY", profile.toUtf8()); }
