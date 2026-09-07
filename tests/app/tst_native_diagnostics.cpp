@@ -53,7 +53,13 @@ struct LockedFile {
 class NativeDiagnosticsTest final : public QObject {
   Q_OBJECT
 private slots:
-  void cleanup() { qunsetenv("PRECISION_LAYOUT_AUDIT"); }
+  void initTestCase() { qInstallMessageHandler(&priorHandler); }
+  void cleanup() {
+    qunsetenv("PRECISION_LAYOUT_AUDIT");
+    if (forwardingTarget && forwardingTarget != &laterHandler) qInstallMessageHandler(forwardingTarget);
+    forwardingTarget = nullptr;
+    reenterOnce = false;
+  }
   void disabledAuditWritesNothing();
   void rejectsMalformedProfileAndSource();
   void recordsTailAndQmlWithoutMessageText();
