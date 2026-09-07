@@ -3,11 +3,33 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlExpression>
+#include <QQmlPropertyMap>
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include "workspace_controller.h"
 #include "mesh_canvas.h"
 #include "ui_text.h"
+class ModelRowWorkspace final : public QObject {
+ Q_OBJECT
+ Q_PROPERTY(QVariantList features READ features CONSTANT)
+ Q_PROPERTY(QVariantList meshVertices READ meshVertices CONSTANT)
+ Q_PROPERTY(QVariantList meshIndices READ meshIndices CONSTANT)
+ Q_PROPERTY(QString operationState READ operationState CONSTANT)
+ Q_PROPERTY(QString errorMessage READ errorMessage CONSTANT)
+ Q_PROPERTY(QString volume READ volume CONSTANT)
+ Q_PROPERTY(QString bounds READ bounds CONSTANT)
+ Q_PROPERTY(bool dirty READ dirty CONSTANT)
+ Q_PROPERTY(bool busy READ busy CONSTANT)
+public:
+ QVariantList features() const { return QVariantList{QVariantMap{{"id", "box-feature-id-12345678"}, {"label", "Box feature with a deliberately long visible model name"}, {"suppressed", false}}}; }
+ QVariantList meshVertices() const { return {}; } QVariantList meshIndices() const { return {}; }
+ QString operationState() const { return "Ready"; } QString errorMessage() const { return {}; } QString volume() const { return "24000 mm³"; } QString bounds() const { return "[-1e-07, -1e-07, -1e-07] to [40, 30, 20] mm"; } bool dirty() const { return false; } bool busy() const { return false; }
+ Q_INVOKABLE void selectBody(const QString &) {} Q_INVOKABLE QString localPath(const QUrl &url) const { return url.toLocalFile(); }
+ Q_INVOKABLE QVariantMap editableDimensions(const QString &) const { return {{"editable", false}}; }
+ Q_INVOKABLE void addBox(double,double,double) {} Q_INVOKABLE void addCylinder(double,double) {} Q_INVOKABLE void booleanOperation(const QString &,const QString &,const QString &) {} Q_INVOKABLE void suppressFeature(const QString &,bool) {} Q_INVOKABLE void updateDimensions(const QString &,double,double,double=0) {} Q_INVOKABLE void undo() {} Q_INVOKABLE void redo() {} Q_INVOKABLE void cancel() {} Q_INVOKABLE void save(const QString &) {} Q_INVOKABLE void open(const QString &) {} Q_INVOKABLE void newDocument() {}
+signals:
+ void saveFinished(bool ok, const QString &message);
+};
 class WorkspaceQmlTest final : public QObject {
  Q_OBJECT
 private slots:
@@ -84,6 +106,19 @@ private slots:
    QObject *fixtureFlickable=fixtureRoot->property("contentItem").value<QObject*>(); QVERIFY(fixtureFlickable); const qreal fixtureMaximum=qMax(0.0, fixtureFlickable->property("contentHeight").toReal()-fixtureFlickable->property("height").toReal()); QVERIFY2(fixtureMaximum > 0.1, "isolated native scroll fixture must overflow before proving reachability");
    QVERIFY(fixtureFlickable->setProperty("contentY", fixtureMaximum)); QCOMPARE(fixtureFlickable->property("contentY").toReal(), fixtureMaximum);
   }
+ }
+ void populatedModelRowGeometry() {
+  QTemporaryDir dir; QVERIFY(dir.isValid());
+  precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));
+  precision::preferences::PersonalVocabularyStore vocab(dir.filePath("private-cache.json"));
+  ModelRowWorkspace workspace;
+  UiText ui(&prefs,&vocab); QQmlEngine engine; auto context=engine.rootContext(); context->setContextProperty("preferences",&prefs); context->setContextProperty("vocabulary",&vocab); context->setContextProperty("workspace",&workspace); context->setContextProperty("uiText",&ui); context->setContextProperty("buildVersion","test"); context->setContextProperty("buildTime","unavailable");
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH))); QVERIFY2(component.isReady(),qPrintable(component.errorString())); std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString())); auto *window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window); window->resize(800,600); window->show(); QCoreApplication::processEvents(); QTest::qWait(20); QCoreApplication::processEvents();
+  auto *tree=root->findChild<QQuickItem*>("modelTree"); QVERIFY(tree); tree->setProperty("currentIndex",0); QMetaObject::invokeMethod(tree,"forceLayout"); QTRY_COMPARE_WITH_TIMEOUT(tree->property("count").toInt(), 1, 1000); QTRY_VERIFY_WITH_TIMEOUT(tree->property("currentItem").value<QObject*>() != nullptr, 1000); auto *delegate=qobject_cast<QQuickItem*>(tree->property("currentItem").value<QObject*>()); QVERIFY(delegate); auto *row=delegate->findChild<QQuickItem*>("modelRow"); auto *label=delegate->findChild<QQuickItem*>("modelRowLabel"); auto *includeSwitch=delegate->findChild<QQuickItem*>("modelRowIncludeSwitch"); QVERIFY(row); QVERIFY(label); QVERIFY(includeSwitch); QVERIFY(includeSwitch->isVisible());
+  const QRectF treeRect=tree->mapRectToScene(tree->boundingRect()); const QRectF rowRect=row->mapRectToScene(row->boundingRect()); const QRectF labelRect=label->mapRectToScene(label->boundingRect()); const QRectF switchRect=includeSwitch->mapRectToScene(includeSwitch->boundingRect());
+  QVERIFY2(rowRect.left() >= treeRect.left()-0.1 && rowRect.right() <= treeRect.right()+0.1, "populated model row must fit in the clipped model tree");
+  QVERIFY2(labelRect.left() >= rowRect.left()-0.1 && labelRect.right() <= switchRect.left()-0.1, "model text must reserve measured space for the Include switch");
+  QVERIFY2(switchRect.right() <= rowRect.right()+0.1 && includeSwitch->width() >= includeSwitch->implicitWidth()-0.1, "the full Include switch must remain inside the populated row");
  }
  void legacyGeometryFixturesFail() {
   QQmlEngine engine;

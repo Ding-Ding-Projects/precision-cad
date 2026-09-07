@@ -17,6 +17,7 @@ ApplicationWindow {
   property bool saveForDeferred: false
   property string vocabularyStatus: ""
   property string selectedLeft: ""; property string selectedRight: ""
+  property string dimensionType: ""
   property string deferredAction: ""
   property url documentFolder: typeof initialDocumentFolder === "undefined" ? "" : initialDocumentFolder
   function copy(en, yue) {
@@ -31,6 +32,7 @@ ApplicationWindow {
   }
   function guard(action) { if(workspace.busy) return; if (workspace.dirty) { deferredAction = action; unsavedDialog.open() } else perform(action) }
   function perform(action) { if(action === "new") workspace.newDocument(); else if(action === "open") openDialog.open(); else if(action === "close") { allowClose=true; root.close() } }
+  function openDimensions() { var dimensions=workspace.editableDimensions(selectedLeft); if (!dimensions.editable) return; dimensionType=dimensions.type; dimA.text=dimensions.first; dimB.text=dimensions.second; dimC.text=dimensions.type === "box" ? dimensions.third : ""; dimensionsDialog.open() }
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
     objectName: "mainToolbar"
@@ -116,17 +118,17 @@ ApplicationWindow {
     Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
       Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
         Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
-        ListView { id: tree; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
+        ListView { id: tree; objectName: "modelTree"; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
           delegate: ItemDelegate { width: tree.width; highlighted: root.selectedLeft === modelData.id || root.selectedRight === modelData.id
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id; workspace.selectBody(modelData.id) }
-            contentItem: Row { spacing: 8
-              Label { textFormat: Text.PlainText; text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: 224; elide: Text.ElideRight }
-              Switch { Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
+            contentItem: Row { id: modelRow; objectName: "modelRow"; width: parent.width; spacing: 8
+              Label { id: modelRowLabel; objectName: "modelRowLabel"; textFormat: Text.PlainText; text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, modelRow.width - includeBody.implicitWidth - modelRow.spacing); elide: Text.ElideRight }
+              Switch { id: includeBody; objectName: "modelRowIncludeSwitch"; Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
             }
           }
         }
-        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: root.selectedLeft !== ""; onClicked: dimensionsDialog.open() }
+        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: workspace.editableDimensions(root.selectedLeft).editable; onClicked: root.openDimensions() }
         Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
@@ -158,14 +160,14 @@ ApplicationWindow {
   }
   Dialog { id: dimensionsDialog; title: root.copy("Edit dimensions","編輯尺寸"); modal: true; standardButtons: Dialog.NoButton
     footer: DialogButtonBox { Button { text: root.copy("OK","確定"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole } Button { text: root.copy("Cancel","取消"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole } }
-    onAccepted: workspace.updateDimensions(root.selectedLeft, Number(dimA.text), Number(dimB.text), Number(dimC.text))
+    onAccepted: workspace.updateDimensions(root.selectedLeft, Number(dimA.text), Number(dimB.text), root.dimensionType === "box" ? Number(dimC.text) : 1)
     Grid { columns:2; padding:16; spacing:8
-      Label { textFormat: Text.PlainText; text: root.copy("First","第一尺寸") }
-      TextField { id:dimA; text:"10" }
-      Label { textFormat: Text.PlainText; text: root.copy("Second","第二尺寸") }
-      TextField { id:dimB; text:"10" }
-      Label { textFormat: Text.PlainText; text: root.copy("Third (box)","第三尺寸（方盒）") }
-      TextField { id:dimC; text:"10" }
+      Label { textFormat: Text.PlainText; text: root.dimensionType === "cylinder" ? root.copy("Radius (mm)","半徑（毫米）") : root.copy("X (mm)","X（毫米）") }
+      TextField { id:dimA; validator: DoubleValidator { bottom: 0.001 } }
+      Label { textFormat: Text.PlainText; text: root.dimensionType === "cylinder" ? root.copy("Height (mm)","高度（毫米）") : root.copy("Y (mm)","Y（毫米）") }
+      TextField { id:dimB; validator: DoubleValidator { bottom: 0.001 } }
+      Label { visible: root.dimensionType === "box"; textFormat: Text.PlainText; text: root.copy("Z (mm)","Z（毫米）") }
+      TextField { id:dimC; visible: root.dimensionType === "box"; validator: DoubleValidator { bottom: 0.001 } }
     }
   }
 }
