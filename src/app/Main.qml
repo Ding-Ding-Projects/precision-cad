@@ -40,19 +40,19 @@ ApplicationWindow {
     implicitHeight: toolbarFlow.implicitHeight + topPadding + bottomPadding
     Flow { id: toolbarFlow; objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
       Label { textFormat: Text.PlainText; text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
-      Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
-      Button { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
-      Button { text: root.copy("Cylinder", "圓柱"); onClicked: cylinderDialog.open() }
-      Button { text: root.copy("Union","合併"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("union", root.selectedLeft, root.selectedRight) }
-      Button { text: root.copy("Cut","切除"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("cut", root.selectedLeft, root.selectedRight) }
-      Button { text: root.copy("Intersect","相交"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("intersection", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
+      ToolButton { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
+      ToolButton { text: root.copy("Cylinder", "圓柱"); onClicked: cylinderDialog.open() }
+      ToolButton { text: root.copy("Union","合併"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("union", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Cut","切除"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("cut", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Intersect","相交"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("intersection", root.selectedLeft, root.selectedRight) }
 
-      Button { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
-      Button { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
-      Button { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
-      Button { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
-      Button { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
-      Button { text: root.copy("Settings", "設定"); onClicked: settings.open() }
+      ToolButton { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
+      ToolButton { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
+      ToolButton { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
+      ToolButton { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
+      ToolButton { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
+      ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
   FileDialog { id: saveDialog; currentFolder: root.documentFolder; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
