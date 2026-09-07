@@ -16,6 +16,9 @@ $buildStartedAt = [DateTimeOffset]::UtcNow.ToString('o')
 $candidateShort = $head.Substring(0, 12)
 $output = Join-Path $root ("artifacts/native/squirrel-windows/" + $candidateShort)
 $buildLog = Join-Path $output 'installer-build.log'
+$setupIcon = Join-Path $root 'assets/precision-cad.ico'
+$iconBytes = [IO.File]::ReadAllBytes($setupIcon)
+if ($iconBytes.Length -lt 6 -or [BitConverter]::ToUInt16($iconBytes, 0) -ne 0 -or [BitConverter]::ToUInt16($iconBytes, 2) -ne 1) { throw 'Squirrel setup icon must be a valid Precision CAD ICO source.' }
 $signerNames = @('signtool','signtool.exe','azuresigntool','azuresigntool.exe')
 $observedSignerInvocations = [Collections.Generic.List[object]]::new()
 function Start-SignerAudit {
@@ -108,7 +111,7 @@ $nupkg = Join-Path $packageRoot ("PrecisionCAD.$Version.nupkg")
 if (-not (Test-Path -LiteralPath $nupkg)) { throw 'NuGet package construction did not produce the expected input package.' }
 $signerAudit = Start-SignerAudit
 Push-Location $output
-try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi } finally { Pop-Location; Stop-SignerAudit $signerAudit }
+try { & $squirrel ("--releasify=" + $nupkg) --releaseDir $output --no-msi --setupIcon $setupIcon } finally { Pop-Location; Stop-SignerAudit $signerAudit }
 if ($LASTEXITCODE -ne 0) { throw "Squirrel.Windows releasify failed with exit code $LASTEXITCODE." }
 if ($observedSignerInvocations.Count -ne 0) { throw 'A signer process was observed during unsigned Squirrel packaging.' }
 $setup = @(Get-ChildItem -LiteralPath $output -File -Filter 'Setup.exe')

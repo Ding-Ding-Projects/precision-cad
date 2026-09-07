@@ -39,6 +39,8 @@ Require ($resource.Contains('IDI_PRECISION_CAD_ICON ICON')) 'version resource do
 
 $appCmake = Get-Content -Raw -LiteralPath (Join-Path $Root 'src/app/CMakeLists.txt')
 $workerCmake = Get-Content -Raw -LiteralPath (Join-Path $Root 'src/geometry/CMakeLists.txt')
+$installerScript = Get-Content -Raw -LiteralPath (Join-Path $Root 'scripts/build-native-installer.ps1')
 Require ($appCmake.Contains('precision_cad_version.rc')) 'desktop target does not consume its version resource'
 Require ($workerCmake.Contains('precision_geometry_worker_version.rc')) 'geometry worker does not consume its version resource'
+Require ($installerScript.Contains('--setupIcon $setupIcon')) 'Squirrel package creation does not bind the project setup icon'
 Write-Output 'Validated native icon inventory and executable version-resource wiring.'
