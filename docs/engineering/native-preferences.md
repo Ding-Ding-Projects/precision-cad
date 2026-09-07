@@ -8,7 +8,7 @@ The QObject exposes Q_PROPERTY values and QML-callable setters for language mode
 
 Every mutation is validated before it is written. The store uses `QLockFile` to refuse concurrent writers and `QSaveFile` for atomic replacement. A failed write leaves the in-memory state unchanged and emits `errorOccurred`. Load accepts only schema version 1 and the exact known key set. Corrupt, unsupported, incomplete, or invalid stored data leaves defaults active without partially applying a record.
 
-`exportPublicPreferences()` deliberately omits per-language voice identifiers. This backend has no personal-vocabulary loader because this Oak Kay does not contain the canonical neutral schema generator. A loader must not be invented from private data. When that generator is available, its bounded versioned schema can be implemented in a separate owned lane, with cache-only storage, duplicate-key rejection, and no path or payload in exports, history, diagnostics, or logs.
+`exportPublicPreferences()` deliberately omits per-language voice identifiers. This backend has no personal-vocabulary loader because this repository does not contain the canonical neutral schema generator. A loader must not be invented from private data. When that generator is available, its bounded versioned schema can be implemented in a separate owned lane, with cache-only storage, duplicate-key rejection, and no path or payload in exports, history, diagnostics, or logs.
 
 ## Focused verification
 
