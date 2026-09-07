@@ -41,14 +41,21 @@ if ($LASTEXITCODE -ne 0) { throw "Native build failed with exit code $LASTEXITCO
 if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed with exit code $LASTEXITCODE." }
 
 $staged = Join-Path $root 'build/native/bin'
-$output = Join-Path $root 'artifacts/native/squirrel-windows'
+$candidateShort = $head.Substring(0, 12)
+$output = Join-Path $root ("artifacts/native/squirrel-windows/" + $candidateShort)
+$artifactsRoot = [IO.Path]::GetFullPath((Join-Path $root 'artifacts/native/squirrel-windows')) + [IO.Path]::DirectorySeparatorChar
+if (-not ([IO.Path]::GetFullPath($output) + [IO.Path]::DirectorySeparatorChar).StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer output must remain inside the task-owned artifacts directory.' }
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $output | Out-Null
-$packageRoot = Join-Path $root 'build/native/squirrel-package'
+$packageRoot = Join-Path $root ("build/native/squirrel-package/" + $candidateShort)
+$packageRootGuard = [IO.Path]::GetFullPath((Join-Path $root 'build/native/squirrel-package')) + [IO.Path]::DirectorySeparatorChar
+if (-not ([IO.Path]::GetFullPath($packageRoot) + [IO.Path]::DirectorySeparatorChar).StartsWith($packageRootGuard, [StringComparison]::OrdinalIgnoreCase)) { throw 'Squirrel package workspace must remain inside the task-owned build directory.' }
 if (Test-Path -LiteralPath $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
 $packageLib = Join-Path $packageRoot 'lib/net45'
 New-Item -ItemType Directory -Force -Path $packageLib | Out-Null
-Copy-Item -LiteralPath (Join-Path $staged '*') -Destination $packageLib -Recurse -Force
+$stagedItems = @(Get-ChildItem -LiteralPath $staged -Force)
+if ($stagedItems.Count -eq 0) { throw 'Native runtime staging produced no packageable files.' }
+foreach ($item in $stagedItems) { Copy-Item -LiteralPath $item.FullName -Destination $packageLib -Recurse -Force }
 $nuspec = Join-Path $packageRoot 'PrecisionCAD.nuspec'
 @"
 <?xml version="1.0"?>

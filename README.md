@@ -38,7 +38,7 @@ The native development build is available through `build-desktop.bat`. The unsig
 .\build-installer.bat /s
 ```
 
-It writes `Setup.exe`, `RELEASES`, and a full `.nupkg` under `artifacts/native/squirrel-windows`. It does not publish, tag, or create a release. The installer is unsigned and Windows will show an unknown-publisher warning.
+It writes `Setup.exe`, `RELEASES`, and a full `.nupkg` under the candidate-specific directory `artifacts/native/squirrel-windows/<commit>`. It does not publish, tag, or create a release. The installer is unsigned and Windows will show an unknown-publisher warning.
 
 ## Website evidence
 

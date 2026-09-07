@@ -10,7 +10,7 @@ The product architecture, roadmap and public repository are established. The ini
 
 ## Native development packaging
 
-The native development release route is `build-installer.bat /s`. It builds with `BUILD_TESTING=OFF`, stages Qt and pinned Open CASCADE runtime files, creates a NuGet input package, and calls genuine Squirrel.Windows `Squirrel.exe --releasify`. Its required local outputs are `Setup.exe`, `RELEASES`, and one or more `*-full.nupkg` files in `artifacts/native/squirrel-windows`. The package is intentionally unsigned. It does not publish a release, run an installer, or prove a fresh-machine bootstrap.
+The native development release route is `build-installer.bat /s`. It builds with `BUILD_TESTING=OFF`, stages Qt and pinned Open CASCADE runtime files, creates a NuGet input package, and calls genuine Squirrel.Windows `Squirrel.exe --releasify`. Its required local outputs are `Setup.exe`, `RELEASES`, and one or more `*-full.nupkg` files in a candidate-specific `artifacts/native/squirrel-windows/<commit>` directory. The package is intentionally unsigned. It does not publish a release, run an installer, or prove a fresh-machine bootstrap.
 
 ## Next work
 
