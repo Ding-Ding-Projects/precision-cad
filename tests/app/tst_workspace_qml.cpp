@@ -271,6 +271,7 @@ private slots:
   QVERIFY2(qAbs(highWorkspaceRect.top()-highToolbarRect.bottom()) < 0.1 && workspaceSplit->height() >= 300, "high-content minimum must retain a positive workspace below the toolbar");
   for (auto *control : flow->childItems()) { const QRectF controlRect=control->mapRectToScene(control->boundingRect()); QVERIFY2(controlRect.top() >= highToolbarRect.top()-0.1 && controlRect.bottom() <= highToolbarRect.bottom()+0.1, "every high-content toolbar control must remain inside the measured toolbar"); }
   QVERIFY2(help->mapRectToScene(help->boundingRect()).bottom() <= modelColumn->mapRectToScene(modelColumn->boundingRect()).bottom()+0.1, "high-content model selection help must remain reachable");
+  auto *modelScroll=root->findChild<QQuickItem*>("modelScroll");QVERIFY(modelScroll);QVERIFY(modelScroll->property("contentHeight").toDouble()>=modelColumn->height()-.1);
   const QRectF scrollRect=inspectorScroll->mapRectToScene(inspectorScroll->boundingRect());
   QObject *flickable=inspectorScroll->property("contentItem").value<QObject*>(); QVERIFY2(flickable, "ScrollView must expose its real content item");
   QVERIFY2(flickable->metaObject()->indexOfProperty("contentY") >= 0 && flickable->metaObject()->indexOfProperty("contentHeight") >= 0, "ScrollView content item must expose real scrolling properties");

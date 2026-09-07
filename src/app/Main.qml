@@ -127,7 +127,8 @@ ApplicationWindow {
   }
   SplitView { objectName: "workspaceSplit"; anchors.fill: parent
     Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
-      Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
+      ScrollView { id: modelScroll; objectName: "modelScroll"; anchors.fill: parent; contentWidth: availableWidth
+      Column { objectName: "modelColumn"; width: modelScroll.availableWidth; height: Math.max(modelScroll.availableHeight, modelHeader.implicitHeight + editDimensionsButton.implicitHeight + selectionHelp.implicitHeight + spacing * 3 + 100); spacing: 8
         Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
         ListView { id: tree; objectName: "modelTree"; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
           delegate: ItemDelegate { width: tree.width; highlighted: workspace.selectedBody === modelData.id
@@ -144,6 +145,7 @@ ApplicationWindow {
         }
         Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: !workspace.busy && workspace.editableDimensions(workspace.selectedBody).editable; onClicked: root.openDimensions() }
         Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+      }
       }
     }
     Pane { SplitView.fillWidth: true

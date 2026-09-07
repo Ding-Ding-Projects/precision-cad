@@ -31,3 +31,5 @@ Model coordinates use Z up. Top looks down positive Z onto XY, with X to the rig
 ## Persistent build provenance
 
 The initial workspace has a native toolbar footer containing the running version and recorded update time, including the original seconds and timezone. It consumes the same `buildVersion` and `buildTime` context values as before; it never derives either value from launch time. The label wraps inside the available width, has no elision, exposes its complete text to accessibility, and remains outside the scrollable inspector. Focused geometry checks cover 800 × 600, font scale 1.5, English, Cantonese and bilingual copy, and both themes.
+
+At large bilingual text sizes, the model pane scrolls its complete contents and reserves at least 100 logical pixels for its model list. The persistent footer never depends on this scrolling path; version provenance remains on the initial screen.
