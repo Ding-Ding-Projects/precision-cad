@@ -64,6 +64,7 @@ private:
   QSizeF m_viewport{1,1};
   QVector3D m_center{},m_boundsCenter{};
   qreal m_radius=100,m_distance=350,m_yaw=-45,m_pitch=-30;
+  bool m_fitted=true;
   Projection m_projection=Projection::Perspective;
   QPointer<MeshGeometry> m_geometry;
   QVariantMap m_selection;

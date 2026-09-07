@@ -6,7 +6,7 @@
 #include <cmath>
 namespace precision::app::viewport {
 namespace { const int registration=qmlRegisterType<ViewportCamera>("PrecisionCad",1,0,"ViewportCamera"); }
-void ViewportCamera::setViewport(QSizeF v) { if(!std::isfinite(v.width())||!std::isfinite(v.height()))return; v={std::max(1.,v.width()),std::max(1.,v.height())}; if(v==m_viewport)return; m_viewport=v; emit changed(); }
+void ViewportCamera::setViewport(QSizeF v) { if(!std::isfinite(v.width())||!std::isfinite(v.height()))return; v={std::max(1.,v.width()),std::max(1.,v.height())}; if(v==m_viewport)return; m_viewport=v; if(m_fitted)fit();else emit changed(); }
 void ViewportCamera::setSceneBounds(QVector3D lo,QVector3D hi) { m_boundsCenter=(lo+hi)*.5f; m_radius=std::max(.001,double((hi-lo).length())*.5); fit(); }
 void ViewportCamera::setGeometry(MeshGeometry *value) {
   if(m_geometry==value)return;
@@ -18,7 +18,7 @@ void ViewportCamera::setGeometry(MeshGeometry *value) {
 }
 void ViewportCamera::setProjection(Projection value) { if(m_projection==value)return; m_projection=value; emit changed(); }
 void ViewportCamera::fit() {
-  m_center=m_boundsCenter;
+  m_fitted=true; m_center=m_boundsCenter;
   const double angle=std::atan(std::tan(qDegreesToRadians(fieldOfView()*.5))*std::min(1.,m_viewport.width()/m_viewport.height()));
   m_distance=m_radius/std::sin(angle)*1.15; emit changed();
 }
@@ -37,8 +37,8 @@ void ViewportCamera::setStandardView(StandardView value) {
 void ViewportCamera::standardView(int value) { if(value>=0&&value<=6)setStandardView(static_cast<StandardView>(value)); }
 void ViewportCamera::setOrbitDegrees(qreal yaw,qreal pitch) { if(!std::isfinite(yaw)||!std::isfinite(pitch))return; m_yaw=std::remainder(yaw,360.);m_pitch=std::clamp(pitch,-89.999,89.999);emit changed(); }
 void ViewportCamera::orbit(qreal dx,qreal dy) { setOrbitDegrees(m_yaw+dx*.45,m_pitch+dy*.45); }
-void ViewportCamera::pan(qreal dx,qreal dy) { if(!std::isfinite(dx)||!std::isfinite(dy))return; const double units=2*halfHeight()/m_viewport.height(); m_center+=right()*float(-dx*units)+up()*float(dy*units);emit changed(); }
-void ViewportCamera::zoomBy(qreal factor) { if(!std::isfinite(factor)||factor<=0)return; m_distance=std::clamp(m_distance*factor,m_radius*.02,m_radius*10000);emit changed(); }
+void ViewportCamera::pan(qreal dx,qreal dy) { if(!std::isfinite(dx)||!std::isfinite(dy))return; const double units=2*halfHeight()/m_viewport.height(); m_fitted=false; m_center+=right()*float(-dx*units)+up()*float(dy*units);emit changed(); }
+void ViewportCamera::zoomBy(qreal factor) { if(!std::isfinite(factor)||factor<=0)return; m_fitted=false; m_distance=std::clamp(m_distance*factor,m_radius*.02,m_radius*10000);emit changed(); }
 QVector3D ViewportCamera::forward() const { const double y=qDegreesToRadians(m_yaw),p=qDegreesToRadians(m_pitch); return QVector3D(-std::sin(y)*std::cos(p),std::sin(p),-std::cos(y)*std::cos(p)).normalized(); }
 QVector3D ViewportCamera::right() const { return QVector3D::crossProduct(forward(),{0,1,0}).normalized(); }
 QVector3D ViewportCamera::up() const { return QVector3D::crossProduct(right(),forward()).normalized(); }
