@@ -13,5 +13,4 @@ if ($receipt.processObservation.exhaustive -ne $true) {
     Write-Output 'Validated blocked release receipt; exhaustive process observation remains unavailable.'
     exit 0
 }
-if ($receipt.verdict -ne 'complete' -or $receipt.install.verified -ne $true -or $receipt.launch.verified -ne $true -or @($receipt.updater.states) -notcontains 'available' -or @($receipt.updater.states) -notcontains 'downloading' -or @($receipt.updater.states) -notcontains 'ready-to-restart') { throw 'Complete release receipt lacks installation, launch, or updater evidence.' }
-Write-Output 'Validated complete disposable-guest release receipt.'
+throw 'No complete-runtime verifier is implemented. Boolean receipt fields cannot substitute for independent installed-file, process-observer, Lowlevel, and updater-feed evidence.'

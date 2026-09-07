@@ -25,8 +25,10 @@ if (Test-Path -LiteralPath $root) { throw 'The task-owned virtual machine path a
 if (-not $PSCmdlet.ShouldProcess($VmName, 'Create a new task-owned Generation 2 Hyper-V virtual machine')) { return }
 New-Item -ItemType Directory -Path $root | Out-Null
 $vhd=Join-Path $root 'disk.vhdx'
-Copy-Item -LiteralPath ([IO.Path]::GetFullPath($BaseImagePath)) -Destination $vhd
+$immutableBasePath=[IO.Path]::GetFullPath($BaseImagePath)
+$immutableBaseSha256=(Get-FileHash -LiteralPath $immutableBasePath -Algorithm SHA256).Hash.ToLowerInvariant()
+Copy-Item -LiteralPath $immutableBasePath -Destination $vhd
 $createdVm=New-VM -Name $VmName -Generation 2 -VHDPath $vhd -Path $root -SwitchName $SwitchName
 Set-VMProcessor -VMName $VmName -Count 4
 Set-VMMemory -VMName $VmName -DynamicMemoryEnabled $true -StartupBytes 4GB
-[ordered]@{version=1;vmName=$VmName;vmId=$createdVm.Id.Guid;vmPath=$root;vhdPath=$vhd;vhdSha256=(Get-FileHash -LiteralPath $vhd -Algorithm SHA256).Hash.ToLowerInvariant();generation=2;switch=[ordered]@{name=$switch.Name;id=$switch.Id};processorCount=4;startupBytes=4GB;createdAt=[DateTimeOffset]::UtcNow.ToString('o');preflightSha256=(Get-FileHash -LiteralPath $PreflightPath -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json -Depth 5
+[ordered]@{version=1;vmName=$VmName;vmId=$createdVm.Id.Guid;vmPath=$root;vhdPath=$vhd;baseImage=[ordered]@{path=$immutableBasePath;sha256=$immutableBaseSha256};generation=2;switch=[ordered]@{name=$switch.Name;id=$switch.Id};processorCount=4;startupBytes=4GB;createdAt=[DateTimeOffset]::UtcNow.ToString('o');preflightSha256=(Get-FileHash -LiteralPath $PreflightPath -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json -Depth 5

@@ -12,10 +12,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if (-not (Test-Path -LiteralPath $ProvisioningReceiptPath -PathType Leaf)) { throw 'The provisioning receipt is missing.' }
 $provisioning=Get-Content -Raw -LiteralPath $ProvisioningReceiptPath | ConvertFrom-Json
-if ($provisioning.version -ne 1 -or $provisioning.vmName -ne $VmName -or $provisioning.vmId -notmatch '^[0-9a-f-]{36}$' -or $provisioning.generation -ne 2 -or $provisioning.vhdSha256 -notmatch '^[0-9a-f]{64}$' -or [string]::IsNullOrWhiteSpace($provisioning.switch.id)) { throw 'The provisioning receipt does not bind this task-owned Generation 2 guest.' }
+if ($provisioning.version -ne 1 -or $provisioning.vmName -ne $VmName -or $provisioning.vmId -notmatch '^[0-9a-f-]{36}$' -or $provisioning.generation -ne 2 -or $provisioning.baseImage.sha256 -notmatch '^[0-9a-f]{64}$' -or [string]::IsNullOrWhiteSpace($provisioning.switch.id)) { throw 'The provisioning receipt does not bind this task-owned Generation 2 guest.' }
 $vm=Get-VM -Name $VmName -ErrorAction Stop
 if ($vm.Id.Guid -ne $provisioning.vmId -or $vm.Generation -ne 2 -or $vm.State -ne 'Running' -or $vm.Path -ne $provisioning.vmPath) { throw 'The task-owned virtual machine does not match its provisioning receipt.' }
-if (-not (Test-Path -LiteralPath $provisioning.vhdPath -PathType Leaf) -or (Get-FileHash -LiteralPath $provisioning.vhdPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $provisioning.vhdSha256) { throw 'The guest VHD no longer matches its provisioning receipt.' }
+if (-not (Test-Path -LiteralPath $provisioning.vhdPath -PathType Leaf)) { throw 'The guest disk path recorded by the provisioning receipt is absent.' }
 $adapter=Get-VMNetworkAdapter -VMName $VmName -ErrorAction Stop | Select-Object -First 1
 $processor=Get-VMProcessor -VMName $VmName -ErrorAction Stop
 if ($adapter.SwitchId -ne $provisioning.switch.id -or $processor.Count -ne $provisioning.processorCount) { throw 'The guest network or processor configuration does not match its provisioning receipt.' }

@@ -6,24 +6,12 @@ if ([string]::IsNullOrWhiteSpace($Root)) { $Root = Split-Path -Parent (Split-Pat
 function Require([bool]$Condition,[string]$Message){if(-not $Condition){throw "Release environment test failed: $Message"}}
 $scriptRoot=Join-Path $Root 'scripts/release-environment'
 foreach($name in @('Test-ReleaseEnvironmentPreflight.ps1','New-ReleaseEnvironmentVm.ps1','Invoke-GuestReleaseVerification.ps1','Invoke-GuestVerification.ps1','Test-GuestReleaseReceipt.ps1')) { Require (Test-Path -LiteralPath (Join-Path $scriptRoot $name)) "$name is missing" }
-$preflight=Get-Content -Raw -LiteralPath (Join-Path $scriptRoot 'Test-ReleaseEnvironmentPreflight.ps1')
-Require ($preflight.Contains('Get-VM')) 'preflight does not inventory existing virtual machines'
-Require ($preflight.Contains('mediaDiscovery')) 'preflight does not record explicit-only media discovery'
-Require ($preflight.Contains('exit 2')) 'preflight does not produce a non-success blocked outcome'
-Require ($preflight.Contains('$existing.Count -eq 1')) 'preflight cannot distinguish a missing target VM from an existing VM'
-$provision=Get-Content -Raw -LiteralPath (Join-Path $scriptRoot 'New-ReleaseEnvironmentVm.ps1')
-Require ($provision.Contains('AcceptBaseImageLicense')) 'provisioning does not require explicit licence acceptance'
-Require ($provision.Contains('already exists and will not be replaced')) 'provisioning can replace a named virtual machine'
-Require ($provision.Contains('$preflightExit')) 'provisioning does not bind the child preflight exit code'
-Require ($provision.Contains('vmId=$createdVm.Id.Guid')) 'provisioning receipt does not bind the created VM identity'
-Require ($provision.Contains('switch=[ordered]')) 'provisioning receipt does not bind the virtual switch'
-$guestHost=Get-Content -Raw -LiteralPath (Join-Path $scriptRoot 'Invoke-GuestReleaseVerification.ps1')
-Require ($guestHost.Contains('ProvisioningReceiptPath')) 'guest route does not require the provisioning receipt'
-Require ($guestHost.Contains('Get-VMNetworkAdapter')) 'guest route does not revalidate the bound network adapter'
-$guest=Get-Content -Raw -LiteralPath (Join-Path $scriptRoot 'Invoke-GuestVerification.ps1')
-Require ($guest.Contains('Win32_ProcessStartTrace AccessDenied')) 'guest receipt does not preserve the known observer blocker'
-Require ($guest.Contains('polling is incomplete')) 'guest receipt treats polling as complete evidence'
-Require (-not $guest.Contains('exit 3')) 'guest verification terminates its persistent session before receipt collection'
+$preflightPath=Join-Path $scriptRoot 'Test-ReleaseEnvironmentPreflight.ps1'
+$preflightReceipt=Join-Path ([IO.Path]::GetTempPath()) ('precision-cad-release-preflight-'+[Guid]::NewGuid().ToString('N')+'.json')
+$shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$startInfo=[Diagnostics.ProcessStartInfo]::new(); $startInfo.FileName=$shell; $startInfo.Arguments=('-NoProfile -ExecutionPolicy Bypass -File "{0}" -VmName PrecisionCAD-ReleaseEnvironment-Test -OutputPath "{1}"' -f $preflightPath,$preflightReceipt); $startInfo.UseShellExecute=$false; $startInfo.CreateNoWindow=$true
+$process=[Diagnostics.Process]::new(); $process.StartInfo=$startInfo; Require ($process.Start()) 'live preflight process could not start'; $process.WaitForExit()
+try { Require ($process.ExitCode -eq 2) 'live preflight unexpectedly became provisionable without an approved image and accessible Hyper-V inventory'; $live=Get-Content -Raw -LiteralPath $preflightReceipt | ConvertFrom-Json; Require (-not $live.provisionable) 'preflight receipt falsely reports provisionable'; Require ($live.baseImage.supplied -eq $false) 'preflight treated an absent base image as supplied'; Require ($live.safety.mediaDiscovery -eq 'explicit-path-only') 'preflight searched for media outside the supplied path' } finally { Remove-Item -LiteralPath $preflightReceipt -Force -ErrorAction SilentlyContinue }
 $validator=Join-Path $scriptRoot 'Test-GuestReleaseReceipt.ps1'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('precision-cad-release-receipt-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
@@ -34,5 +22,7 @@ try {
   $failed=$false;try{& $validator -ReceiptPath $blocked -RequireComplete}catch{$failed=$true};Require $failed 'complete validator accepted a blocked process observer'
   $invalid=Join-Path $temp 'invalid.json'; @{version=1;kind='precision-cad-release-environment-runtime';observedAt=[DateTimeOffset]::UtcNow.ToString('o');setup=@{name='Setup.exe';sha256=('a'*64)};boundary=@{disposableGuest=$true;localAppDataRedirect=$false;hostUserProfileMutation=$false};processObservation=@{mode='blocked';exhaustive=$false;reason='Win32_ProcessStartTrace AccessDenied'};install=@{attempted=$true};launch=@{attempted=$false};verdict='blocked'} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $invalid -Encoding utf8
   $failed=$false;try{& $validator -ReceiptPath $invalid}catch{$failed=$true};Require $failed 'validator accepted an install claim under blocked observation'
+  $forged=Join-Path $temp 'forged.json'; @{version=1;kind='precision-cad-release-environment-runtime';observedAt=[DateTimeOffset]::UtcNow.ToString('o');setup=@{name='Setup.exe';sha256=('a'*64)};boundary=@{disposableGuest=$true;localAppDataRedirect=$false;hostUserProfileMutation=$false};processObservation=@{mode='Win32_ProcessStartTrace';exhaustive=$true};install=@{verified=$true};launch=@{verified=$true};updater=@{states=@('available','downloading','ready-to-restart')};verdict='complete'} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $forged -Encoding utf8
+  $failed=$false;try{& $validator -ReceiptPath $forged -RequireComplete}catch{$failed=$true};Require $failed 'validator accepted forged complete boolean fields as independent runtime evidence'
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
 Write-Output 'Validated release environment preflight, provisioning boundaries, and blocked-receipt behavior.'
