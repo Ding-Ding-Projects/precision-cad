@@ -9,7 +9,7 @@
 
 namespace precision::history {
 
-struct HistoryError { QString code; QString message; };
+struct HistoryError { QString code; QString message; QString recoverableCommit; };
 struct ProjectStatus { bool repository = false; bool clean = false; QString root; QString branch; QStringList modified; QStringList staged; QStringList untracked; HistoryError error; };
 struct HistoryCommit { QString id; QString shortId; QString subject; QString author; QDateTime timestamp; };
 struct BranchInfo { QString name; QString id; bool current = false; };
@@ -23,6 +23,7 @@ class LocalHistoryService final : public QObject {
 public:
     explicit LocalHistoryService(QObject *parent = nullptr);
     bool initialize(const QString &projectDirectory, const QString &gitExecutable = QString());
+    bool createProjectRepository(const QString &projectDirectory, const QString &gitExecutable = QString(), HistoryError *error = nullptr);
     [[nodiscard]] QString projectDirectory() const;
     [[nodiscard]] ProjectStatus inspectStatus() const;
     [[nodiscard]] QVector<HistoryCommit> listCommits(int limit = 100) const;
@@ -34,7 +35,7 @@ public:
     bool applyRestore(const RestorePreview &preview, HistoryError *error = nullptr);
 private:
     struct ProcessResult { int exitCode = -1; bool timedOut = false; QByteArray output; QByteArray error; };
-    [[nodiscard]] ProcessResult git(const QStringList &arguments, int timeoutMs = 10000, const QProcessEnvironment &extraEnvironment = {}) const;
+    [[nodiscard]] ProcessResult git(const QStringList &arguments, int timeoutMs = 10000, const QProcessEnvironment &extraEnvironment = {}, const QByteArray &input = {}) const;
     [[nodiscard]] bool validSelectedPath(const QString &relativePath, QString *absolutePath = nullptr, HistoryError *error = nullptr) const;
     [[nodiscard]] bool validateDocument(const QByteArray &bytes, HistoryError *error = nullptr) const;
     [[nodiscard]] bool initialized(HistoryError *error = nullptr) const;
