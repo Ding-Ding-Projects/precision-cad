@@ -1,11 +1,19 @@
-# Native viewport
+# Native 3D viewport
 
-The desktop viewport uses Qt Quick 3D with a native `QQuick3DGeometry` mesh. Vertex positions, normals and indices are uploaded as interleaved float attributes and 32-bit indices. Qt Quick 3D performs depth-buffered triangle rendering, so draw order does not determine visible surfaces.
+The production workspace uses Qt Quick 3D `View3D` with depth testing, custom indexed triangle geometry and lit normals. `ViewportCamera` is the single QObject controlling both QML cameras and the screen ray used for mesh selection. The former painted mesh is no longer instantiated by the workspace.
 
-`MeshGeometry` accepts the controller's existing flat `meshVertices` and `meshIndices` lists. It accepts optional normals; when a legacy result has none, it derives smooth normals from the indexed triangles. The next controller contract is `meshParts`, a list of `{bodyId, vertices, indices, normals, topology}` records. That keeps each body independently addressable and leaves room for topology identifiers without breaking older workers.
+## Navigation and selection
 
-The reusable C++ camera model lives in `src/app/viewport/viewport_camera.*`. It supports orthographic and perspective projection, isometric plus six standard views, screen projection and world rays. Rendering uses local float coordinates only; authoritative Open CASCADE geometry remains in the document and worker paths using their existing precision.
+Left drag orbits around the current target. Right drag, middle drag or Shift + left drag pans on the target plane. The wheel zooms; Fit and double-click frame the complete current scene using its bounds and viewport aspect ratio. Toolbar controls choose perspective or orthographic projection and seven standard views. Fit preserves the selected orientation. A left click without a drag selects the nearest intersected visible body.
 
-`ViewportPicker` ray-tests the indexed mesh and returns the nearest positive triangle. If the ray is within the supplied world tolerance of a vertex or triangle boundary, it returns a mesh vertex or visual edge in preference to the face. Those identifiers are explicitly mesh-level until the worker supplies `triangleFaceIds`, `edgePolylines`, and topology entities. The renderer must not present them as persistent CAD topology before that mapping exists.
+`meshParts` supplies separate `{bodyId, vertices, indices, normals}` records. A controller without this property can supply the legacy selected mesh arrays. Rendering combines the current visible parts into one index buffer and records each part's triangle range. Picking returns `{kind: "meshTriangle", bodyId, triangleIndex, position}`. The triangle index belongs to that combined render mesh revision. It is not a persistent CAD face, edge, vertex or topology reference and must never be stored as one.
 
-`tests/app/tst_viewport_math.cpp` covers standard-view rays, center projection, nearest-depth selection, vertex/edge priority and invalid mesh input. Run it through the normal application CTest build after Qt 6.8.3 includes the `qtquick3d` addon.
+## Precision and validation
+
+Source positions remain doubles in controller data. The geometry adapter computes global bounds and their midpoint in double precision, subtracts that midpoint, scales the bounding sphere to radius 100, and only then converts to GPU floats. The camera and picker use these same normalized coordinates. Returned hit coordinates are transformed back to the source coordinate frame. This preserves small relative shapes translated far from the origin but does not promise precision finer than double source input or float rasterization within the local scene.
+
+Every index must be finite, integral and in range before upload. Nonfinite coordinates, malformed arrays and zero-extent geometry clear the render buffers and cannot return a hit. `setBounds` publishes the same normalized bounds used by fit. Valid supplied normals are normalized and uploaded; missing or invalid normals use area-weighted triangle normals. That fallback is a display approximation, not a reconstructed analytic CAD normal. Backface culling is disabled so the visible triangle surface and two-sided ray tests agree.
+
+## Verification
+
+`viewport-math` covers camera rays and nearest triangle, edge and vertex math. `workspace-qml` additionally instantiates production Main.qml and exercises actual camera/geometry bindings, projection and standard-view controls, fit, pan, orbit, click selection, translated multi-body input and invalid-buffer clearing. CTest prepends the configured Qt runtime directory. These checks do not replace inspection of the built application's depth rendering on a real graphics backend.

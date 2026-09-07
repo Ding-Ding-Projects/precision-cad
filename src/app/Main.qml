@@ -50,7 +50,11 @@ ApplicationWindow {
 
       ToolButton { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
       ToolButton { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
-      ToolButton { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
+      ToolButton { objectName: "fitViewButton"; text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
+      ToolButton { objectName: "projectionButton"; text: cameraState.perspective ? root.copy("Orthographic", "正投影") : root.copy("Perspective", "透視"); onClicked: cameraState.perspective=!cameraState.perspective }
+      Repeater { model: [root.copy("Iso","等角"),root.copy("Front","前"),root.copy("Back","後"),root.copy("Left","左"),root.copy("Right","右"),root.copy("Top","頂"),root.copy("Bottom","底")]
+        ToolButton { required property int index; required property string modelData; objectName: "standardView"+index; text: modelData; onClicked: cameraState.standardView(index) }
+      }
       ToolButton { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
       ToolButton { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
       ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
@@ -136,27 +140,43 @@ ApplicationWindow {
       }
     }
     Pane { SplitView.fillWidth: true
-      MeshCanvas { id: viewport; objectName: "viewport"; anchors.fill: parent; backgroundColor: Material.background; foregroundColor: Material.foreground; bodyColor: Material.accent; emptyText: root.copy("No regenerated mesh","尚未生成網格"); vertices: workspace.meshVertices; indices: workspace.meshIndices; property real cameraDistance: 180; property bool perspective: true
-        function fit() { yaw=-45; pitch=30; cameraDistance=180 }
-        Quick3D.View3D { id: nativeView; anchors.fill: parent; renderMode: Quick3D.View3D.Offscreen; environment: Quick3D.SceneEnvironment { clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
-          camera: viewportCamera
-          Quick3D.PerspectiveCamera { id: viewportCamera; position: Qt.vector3d(0, 0, viewport.cameraDistance); eulerRotation: Qt.vector3d(-viewport.pitch, viewport.yaw, 0); clipNear: 0.1; clipFar: 100000 }
+      Item { id: viewport; objectName: "viewport"; anchors.fill: parent
+        property var vertices: workspace.meshVertices
+        property var indices: workspace.meshIndices
+        property alias cameraController: cameraState
+        function fit() { cameraState.fit() }
+        ViewportCamera { id: cameraState; objectName: "cameraController"; viewportSize: Qt.size(viewport.width, viewport.height); geometry: sceneMesh }
+        Quick3D.View3D { id: nativeView; objectName: "nativeView"; anchors.fill: parent
+          renderMode: Quick3D.View3D.Offscreen
+          environment: Quick3D.SceneEnvironment { clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; depthTestEnabled: true; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
+          camera: cameraState.perspective ? perspectiveCamera : orthographicCamera
+          Quick3D.PerspectiveCamera { id: perspectiveCamera; objectName: "perspectiveCamera"; position: cameraState.position; rotation: cameraState.orientation; fieldOfView: cameraState.fieldOfView; fieldOfViewOrientation: Quick3D.PerspectiveCamera.Vertical; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
+          Quick3D.OrthographicCamera { id: orthographicCamera; objectName: "orthographicCamera"; position: cameraState.position; rotation: cameraState.orientation; horizontalMagnification: cameraState.magnification; verticalMagnification: cameraState.magnification; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
           Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(-35, -45, 0); brightness: 1.25 }
-          Quick3D.Model {
-            id: meshModel
-            pickable: true
-            geometry: MeshGeometry { vertices: workspace.meshVertices; indices: workspace.meshIndices }
-            materials: Quick3D.PrincipledMaterial { baseColor: Material.accent; roughness: .65; metalness: .15 }
+          Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(35, 135, 0); brightness: .45 }
+          Quick3D.Model { id: meshModel; objectName: "meshModel"; visible: sceneMesh.valid; pickable: true
+            geometry: MeshGeometry { id: sceneMesh; objectName: "sceneMesh"; vertices: viewport.vertices; indices: viewport.indices; normals: typeof workspace.meshNormals === "undefined" ? [] : workspace.meshNormals; parts: typeof workspace.meshParts === "undefined" ? [] : workspace.meshParts; fallbackBodyId: workspace.selectedBody }
+            materials: Quick3D.PrincipledMaterial { baseColor: Material.accent; roughness: .65; metalness: .15; cullMode: Quick3D.Material.NoCulling }
           }
         }
-        Label { anchors.centerIn: parent; visible: workspace.meshVertices.length === 0; textFormat: Text.PlainText; text: root.copy("No regenerated mesh","尚未生成網格"); color: Material.foreground }
-        MouseArea { anchors.fill: parent; property real lastX; property real lastY; acceptedButtons: Qt.LeftButton | Qt.RightButton
-          onPressed: (m)=> {lastX=m.x;lastY=m.y}
-          onPositionChanged: (m)=> { if(pressedButtons & Qt.LeftButton) { viewport.yaw+=(m.x-lastX)*.45; viewport.pitch=Math.max(-89,Math.min(89,viewport.pitch+(m.y-lastY)*.45)) } lastX=m.x;lastY=m.y }
-          onWheel: (w)=> viewport.cameraDistance=Math.max(1,Math.min(100000,viewport.cameraDistance*(w.angleDelta.y>0?.89:1.12)))
+        Label { anchors.centerIn: parent; visible: !sceneMesh.valid; textFormat: Text.PlainText; text: root.copy("No valid regenerated mesh","尚未生成有效網格"); color: Material.foreground }
+        MouseArea { id: viewportInput; objectName: "viewportInput"; anchors.fill: parent
+          property real lastX; property real lastY; property real pressX; property real pressY; property bool dragged: false
+          acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+          onPressed: (m)=> { lastX=pressX=m.x; lastY=pressY=m.y; dragged=false }
+          onPositionChanged: (m)=> {
+            if (Math.abs(m.x-pressX)+Math.abs(m.y-pressY)>4) dragged=true
+            if(pressedButtons & (Qt.RightButton | Qt.MiddleButton) || ((pressedButtons & Qt.LeftButton) && (m.modifiers & Qt.ShiftModifier))) cameraState.pan(m.x-lastX,m.y-lastY)
+            else if(pressedButtons & Qt.LeftButton) cameraState.orbit(m.x-lastX,m.y-lastY)
+            lastX=m.x; lastY=m.y
+          }
+          onReleased: (m)=> { if(!dragged && m.button===Qt.LeftButton) { var hit=cameraState.pick(m.x,m.y); if(hit.bodyId)workspace.selectBody(hit.bodyId) } }
+          onDoubleClicked: viewport.fit()
+          onWheel: (w)=> { cameraState.zoomBy(Math.exp(-w.angleDelta.y*.001)); w.accepted=true }
         }
       }
     }
+
     Pane { objectName: "inspectorPane"; SplitView.preferredWidth: 290
       ScrollView { id: inspectorScroll; objectName: "inspectorScroll"; anchors.fill: parent; contentWidth: availableWidth
       Column { objectName: "inspectorColumn"; width: inspectorScroll.availableWidth; spacing: 10

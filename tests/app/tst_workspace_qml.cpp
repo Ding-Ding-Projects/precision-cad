@@ -9,8 +9,13 @@
 #include "workspace_controller.h"
 #include "mesh_canvas.h"
 #include "ui_text.h"
+#include "viewport/viewport_camera.h"
+#include "viewport/mesh_geometry.h"
+#include <limits>
 class ModelRowWorkspace final : public QObject {
  Q_OBJECT
+ Q_PROPERTY(QVariantList meshParts MEMBER sceneParts NOTIFY meshChanged)
+ Q_PROPERTY(QVariantList meshNormals MEMBER sceneNormals NOTIFY meshChanged)
  Q_PROPERTY(QVariantList features READ features NOTIFY documentChanged)
  Q_PROPERTY(QVariantList meshVertices READ meshVertices NOTIFY meshChanged)
  Q_PROPERTY(QVariantList meshIndices READ meshIndices NOTIFY meshChanged)
@@ -22,6 +27,7 @@ class ModelRowWorkspace final : public QObject {
  Q_PROPERTY(bool dirty READ dirty CONSTANT)
  Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 public:
+ QVariantList sceneParts,sceneNormals;
  QVariantList rows{QVariantMap{{"id", "box-feature-id-12345678"}, {"label", "Box feature with a deliberately long visible model name"}, {"suppressed", false}}};
  QMap<QString,QVariantMap> dimensions;
  QString activeBody, updatedBody;
@@ -50,6 +56,59 @@ signals:
 class WorkspaceQmlTest final : public QObject {
  Q_OBJECT
 private slots:
+ void nativeCameraBindingPickingAndInput() {
+  QTemporaryDir dir; QVERIFY(dir.isValid());
+  precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));
+  precision::preferences::PersonalVocabularyStore vocab(dir.filePath("private-cache.json"));
+  ModelRowWorkspace workspace;
+  const double origin=1e12;
+  const QVariantList nearVertices{origin-2,origin-2,origin+1,origin+2,origin-2,origin+1,origin,origin+2,origin+1};
+  const QVariantList farVertices{origin-2,origin-2,origin,origin+2,origin-2,origin,origin,origin+2,origin};
+  workspace.sceneParts={QVariantMap{{"bodyId","far"},{"vertices",farVertices},{"indices",QVariantList{0,1,2}}},QVariantMap{{"bodyId","near"},{"vertices",nearVertices},{"indices",QVariantList{0,1,2}},{"normals",QVariantList{0,0,1,0,0,1,0,0,1}}}};
+  UiText ui(&prefs,&vocab); QQmlEngine engine;
+  auto context=engine.rootContext(); context->setContextProperty("preferences",&prefs);context->setContextProperty("vocabulary",&vocab);context->setContextProperty("workspace",&workspace);context->setContextProperty("uiText",&ui);context->setContextProperty("buildVersion","test");context->setContextProperty("buildTime","unavailable");
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH)));
+  QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+  std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
+  auto *window=qobject_cast<QQuickWindow*>(root.get());QVERIFY(window);
+  auto *viewport=root->findChild<QQuickItem*>("viewport");QVERIFY(viewport);
+  auto *camera=root->findChild<precision::app::viewport::ViewportCamera*>("cameraController");QVERIFY(camera);
+  auto *mesh=root->findChild<precision::app::viewport::MeshGeometry*>("sceneMesh");QVERIFY(mesh);
+  auto *native=root->findChild<QQuickItem*>("nativeView");QVERIFY(native);
+  auto *perspective=root->findChild<QObject*>("perspectiveCamera");auto *orthographic=root->findChild<QObject*>("orthographicCamera");QVERIFY(perspective);QVERIFY(orthographic);
+  window->show();QCoreApplication::processEvents();
+  QVERIFY(mesh->valid());QCOMPARE(mesh->localPositions().size(),6);QVERIFY(mesh->boundsMax().x()>mesh->boundsMin().x());QCOMPARE(camera->geometry(),mesh);
+  QCOMPARE(camera->viewportSize(),QSizeF(viewport->width(),viewport->height()));
+  camera->standardView(1);camera->fit();
+  const QPointF center(viewport->width()/2,viewport->height()/2);
+  const auto hit=camera->pick(center.x(),center.y());QCOMPARE(hit.value("bodyId").toString(),QString("near"));QCOMPARE(hit.value("triangleIndex").toInt(),1);QCOMPARE(hit.value("kind").toString(),QString("meshTriangle"));
+  QVERIFY(std::abs(hit.value("position").toList()[2].toDouble()-(origin+1))<.001);
+  QCOMPARE(native->property("camera").value<QObject*>(),perspective);
+  QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
+  QCOMPARE(perspective->property("rotation").value<QQuaternion>(),camera->orientation());
+  const auto originalEye=camera->eye();camera->orbit(60,20);QVERIFY(camera->eye()!=originalEye);
+  QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
+  camera->standardView(1);camera->fit();
+  const auto panPoint=camera->center();const auto beforePan=camera->project(panPoint);camera->pan(23,-17);
+  const auto afterPan=camera->project(panPoint);QVERIFY((afterPan-beforePan-QPointF(23,-17)).manhattanLength()<.001);
+  const auto beforeZoom=camera->distance();camera->zoomBy(.5);QVERIFY(camera->distance()<beforeZoom);
+  QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("fitViewButton"),"clicked"));QVERIFY(camera->center().length()<.001);
+  QVERIFY(QMetaObject::invokeMethod(root->findChild<QObject*>("projectionButton"),"clicked"));QVERIFY(!camera->perspective());QCOMPARE(native->property("camera").value<QObject*>(),orthographic);
+  QCOMPARE(orthographic->property("horizontalMagnification").toDouble(),camera->magnification());
+  QCOMPARE(camera->pick(center.x(),center.y()).value("bodyId").toString(),QString("near"));
+  const QPoint click=viewport->mapToScene(center).toPoint();QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,click);QCOMPARE(workspace.selectedBody(),QString("near"));
+  camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
+  QTest::mousePress(window,Qt::RightButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(25,10));QTest::mouseRelease(window,Qt::RightButton,Qt::NoModifier,click+QPoint(25,10));QVERIFY(camera->center()!=panOrigin);
+  const auto dragEye=camera->eye();QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(35,15));QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,click+QPoint(35,15));QVERIFY(camera->eye()!=dragEye);
+  for(int view=0;view<7;++view) { auto *button=root->findChild<QObject*>("standardView"+QString::number(view));QVERIFY(button);QVERIFY(QMetaObject::invokeMethod(button,"clicked"));camera->fit();QVERIFY((camera->project(camera->center())-center).manhattanLength()<.01); }
+  // Negative contracts: invalid input cannot leave stale GPU bytes or a pickable scene.
+  auto bad=workspace.sceneParts;auto part=bad[0].toMap();part["indices"]=QVariantList{0,1,99};bad[0]=part;mesh->setParts(bad);QVERIFY(!mesh->valid());QVERIFY(mesh->vertexData().isEmpty());QVERIFY(camera->pick(center.x(),center.y()).isEmpty());
+  mesh->setParts(workspace.sceneParts);QVERIFY(mesh->valid());
+  part["indices"]=QVariantList{0,1,-1};bad[0]=part;mesh->setParts(bad);QVERIFY(!mesh->valid());
+  part["indices"]=QVariantList{0,1,1.5};bad[0]=part;mesh->setParts(bad);QVERIFY(!mesh->valid());
+  part["indices"]=QVariantList{0,1,2};part["vertices"]=QVariantList{0,0,0,1,0,0,0,std::numeric_limits<double>::infinity(),0};bad[0]=part;mesh->setParts(bad);QVERIFY(!mesh->valid());
+  mesh->setParts(workspace.sceneParts);QVERIFY(mesh->valid());
+ }
  void activeBodyDimensionRouting() {
   QTemporaryDir dir; QVERIFY(dir.isValid());
   precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));
@@ -68,7 +127,7 @@ private slots:
   std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
   auto *window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window); window->show();
   auto *tree=root->findChild<QQuickItem*>("modelTree"); QVERIFY(tree);
-  auto *viewport=root->findChild<MeshCanvas*>("viewport"); QVERIFY(viewport);
+  auto *viewport=root->findChild<QQuickItem*>("viewport"); QVERIFY(viewport);
   // Resolve actual QML ids without adding production-only test hooks or copying handlers.
   const auto qmlObject=[&](const QString &id) { QQmlExpression expression(qmlContext(root.get()),root.get(),id); return expression.evaluate().value<QObject*>(); };
   auto *edit=qmlObject("editDimensionsButton"); auto *dialog=qmlObject("dimensionsDialog");
@@ -81,11 +140,11 @@ private slots:
   };
   QTRY_COMPARE(tree->property("count").toInt(),3);
   QVERIFY(clickRow(0)); QCOMPARE(workspace.selectedBody(),QString("A"));
-  const auto meshA=viewport->vertices(); QVERIFY(!meshA.isEmpty());
+  const auto meshA=viewport->property("vertices").toList(); QVERIFY(!meshA.isEmpty());
   QVERIFY(clickRow(1)); QCOMPARE(workspace.selectedBody(),QString("B"));
   QCOMPARE(root->property("selectedLeft").toString(),QString("A"));
   QCOMPARE(root->property("selectedRight").toString(),QString("B"));
-  QCOMPARE(viewport->vertices(),workspace.meshVertices()); QVERIFY(viewport->vertices()!=meshA);
+  QCOMPARE(viewport->property("vertices").toList(),workspace.meshVertices()); QVERIFY(viewport->property("vertices").toList()!=meshA);
   QVERIFY(edit->property("enabled").toBool()); QVERIFY(QMetaObject::invokeMethod(edit,"clicked"));
   QVERIFY(dialog->property("visible").toBool()); QCOMPARE(root->property("editTargetId").toString(),QString("B"));
   QCOMPARE(first->property("text").toString(),QString("20")); QCOMPARE(second->property("text").toString(),QString("21")); QCOMPARE(third->property("text").toString(),QString("22"));
@@ -108,7 +167,7 @@ private slots:
   workspace.setBusy(false); QVERIFY(QMetaObject::invokeMethod(edit,"clicked")); QVERIFY(dialog->property("visible").toBool());
   workspace.newDocument(); QCoreApplication::processEvents();
   QCOMPARE(workspace.selectedBody(),QString()); QCOMPARE(root->property("selectedLeft").toString(),QString()); QCOMPARE(root->property("selectedRight").toString(),QString());
-  QCOMPARE(root->property("editTargetId").toString(),QString()); QTRY_VERIFY(!dialog->property("visible").toBool()); QVERIFY(!edit->property("enabled").toBool()); QVERIFY(viewport->vertices().isEmpty());
+  QCOMPARE(root->property("editTargetId").toString(),QString()); QTRY_VERIFY(!dialog->property("visible").toBool()); QVERIFY(!edit->property("enabled").toBool()); QVERIFY(viewport->property("vertices").toList().isEmpty());
   QVERIFY(QMetaObject::invokeMethod(dialog,"accepted")); QCOMPARE(workspace.updateCount,1);
  }
  void surfaceBindings() {
