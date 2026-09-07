@@ -30,17 +30,19 @@ The base image is an external licensed input. This repository neither downloads 
 
 ## Guest execution and receipts
 
-After the guest has been prepared by the approved provisioning route, use its receipt together with a protected credential object. The host revalidates the created VM ID, Generation 2, VM path, VHD hash, switch identity, processor count, and a running state before it copies any candidate files. It creates a fresh GUID-named guest staging directory, never reuses `C:\ReleaseVerification`, and copies the receipt back before declaring the blocked result.
+After the guest has been prepared by the approved provisioning route, use its opaque VM ID together with a protected credential object. The creation route alone writes an owner-only, CurrentUser-DPAPI-protected registry record below the fixed local registry root. Guest execution accepts no caller-provided provisioning JSON. It reads that protected record and revalidates the created VM ID, Generation 2, VM path, guest-disk path, private switch identity, processor count, and a running state before it copies any candidate files. A same-user administrator can still alter host resources, so this is provenance and accidental-or-imported-record protection, not a defence against a malicious local administrator.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-environment/Invoke-GuestReleaseVerification.ps1 `
   -VmName PrecisionCAD-ReleaseVerification `
   -Credential $approvedCredential `
-  -ProvisioningReceiptPath artifacts/release-environment/provisioning-receipt.json `
+  -VmId <opaque-created-vm-id> `
   -GuestScriptPath scripts/release-environment/Invoke-GuestVerification.ps1 `
   -GuestArtifactDirectory artifacts/native/squirrel-windows/<candidate> `
   -GuestReceiptPath artifacts/release-environment/runtime-receipt.json
 ```
+
+The creation registry writes durable protected stage records before and after directory creation, disk copy, VM creation, and configuration. A failure is recorded as `partial` with its safe recovery context. The route does not automatically remove partially created resources. Initial provisioning requires a named `Private` switch, so the guest has no external network until a later explicitly authorized setup changes that condition.
 
 The guest route is intentionally receipt-first. It records the setup hash, isolation facts, attempted installation and launch states, and a reserved deterministic prior/candidate updater feed section.
 

@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$VmName,
     [Parameter(Mandatory=$true)][pscredential]$Credential,
-    [Parameter(Mandatory=$true)][string]$ProvisioningReceiptPath,
+    [Parameter(Mandatory=$true)][string]$VmId,
     [Parameter(Mandatory=$true)][string]$GuestScriptPath,
     [Parameter(Mandatory=$true)][string]$GuestArtifactDirectory,
     [Parameter(Mandatory=$true)][string]$GuestReceiptPath
@@ -10,9 +10,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-if (-not (Test-Path -LiteralPath $ProvisioningReceiptPath -PathType Leaf)) { throw 'The provisioning receipt is missing.' }
-$provisioning=Get-Content -Raw -LiteralPath $ProvisioningReceiptPath | ConvertFrom-Json
-if ($provisioning.version -ne 1 -or $provisioning.vmName -ne $VmName -or $provisioning.vmId -notmatch '^[0-9a-f-]{36}$' -or $provisioning.generation -ne 2 -or $provisioning.baseImage.sha256 -notmatch '^[0-9a-f]{64}$' -or [string]::IsNullOrWhiteSpace($provisioning.switch.id)) { throw 'The provisioning receipt does not bind this task-owned Generation 2 guest.' }
+Import-Module (Join-Path $PSScriptRoot 'ReleaseEnvironmentRegistry.psm1') -Force
+$provisioning=Read-ReleaseEnvironmentRecord $VmId
+if ($provisioning.version -ne 2 -or $provisioning.stage -ne 'configured' -or $provisioning.vmName -ne $VmName -or $provisioning.vmId -ne $VmId -or $provisioning.generation -ne 2 -or $provisioning.baseImage.sha256 -notmatch '^[0-9a-f]{64}$' -or $provisioning.switch.type -ne 'Private') { throw 'No owner-created configured record binds this isolated task guest.' }
 $vm=Get-VM -Name $VmName -ErrorAction Stop
 if ($vm.Id.Guid -ne $provisioning.vmId -or $vm.Generation -ne 2 -or $vm.State -ne 'Running' -or $vm.Path -ne $provisioning.vmPath) { throw 'The task-owned virtual machine does not match its provisioning receipt.' }
 if (-not (Test-Path -LiteralPath $provisioning.vhdPath -PathType Leaf)) { throw 'The guest disk path recorded by the provisioning receipt is absent.' }
