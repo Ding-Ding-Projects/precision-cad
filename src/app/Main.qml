@@ -10,25 +10,31 @@ ApplicationWindow {
   Material.theme: Material.Dark; Material.accent: Material.Blue
   property string selectedLeft: ""; property string selectedRight: ""
   property string deferredAction: ""
+  function copy(en, yue) {
+    var english = preferences.englishTone >= 4 ? en + " Please." : en
+    var cantonese = preferences.cantoneseTone >= 4 ? yue + "，唔該。" : yue
+    var rendered = preferences.languageMode === "yue" ? cantonese : preferences.languageMode === "both" ? english + "\n" + cantonese : english
+    return vocabulary.loaded ? vocabulary.applyPrivateUiText(rendered) : rendered
+  }
   function guard(action) { if (workspace.dirty) { deferredAction = action; unsavedDialog.open() } else perform(action) }
   function perform(action) { if(action === "new") workspace.newDocument(); else if(action === "open") openDialog.open(); else if(action === "close") Qt.quit() }
   onClosing: (close)=> { if(workspace.dirty) { close.accepted=false; guard("close") } }
   header: ToolBar {
     Row { anchors.fill: parent; anchors.margins: 8; spacing: 8
-      Label { text: "Precision CAD"; font.pixelSize: 20; font.bold: true; width: 230 }
-      Button { text: "Box"; onClicked: boxDialog.open() }
-      Button { text: "New"; onClicked: root.guard("new") }
-      Button { text: "Cylinder"; onClicked: cylinderDialog.open() }
+      Label { text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
+      Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
+      Button { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
+      Button { text: root.copy("Cylinder", "圓柱"); onClicked: cylinderDialog.open() }
       Button { text: "Union"; enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("union", root.selectedLeft, root.selectedRight) }
       Button { text: "Cut"; enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("cut", root.selectedLeft, root.selectedRight) }
       Button { text: "Intersect"; enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("intersection", root.selectedLeft, root.selectedRight) }
       Item { width: 1; height: 1; Layout.fillWidth: true }
-      Button { text: "Undo"; onClicked: workspace.undo() }
-      Button { text: "Redo"; onClicked: workspace.redo() }
-      Button { text: "Fit"; onClicked: viewport.fit() }
-      Button { text: "Save"; onClicked: saveDialog.open() }
-      Button { text: "Open"; onClicked: root.guard("open") }
-      Button { text: "Settings"; onClicked: settings.open() }
+      Button { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
+      Button { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
+      Button { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
+      Button { text: root.copy("Save", "儲存"); onClicked: saveDialog.open() }
+      Button { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
+      Button { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
   FileDialog { id: saveDialog; title: "Save native Precision CAD document"; fileMode: FileDialog.SaveFile; nameFilters: ["Precision CAD (*.pcad)"]; onAccepted: workspace.save(selectedFile.toLocalFile()) }
@@ -92,7 +98,7 @@ ApplicationWindow {
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id }
             contentItem: Row { spacing: 8
-              Label { text: parent.text; anchors.verticalCenter: parent.verticalCenter; width: 224; elide: Text.ElideRight }
+              Label { text: parent.text; textFormat: Text.PlainText; anchors.verticalCenter: parent.verticalCenter; width: 224; elide: Text.ElideRight }
               Switch { checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
             }
           }
@@ -114,7 +120,7 @@ ApplicationWindow {
       Column { anchors.fill: parent; spacing: 10
         Label { text: "Operation"; font.bold: true; font.pixelSize: 18 }
         Label { text: workspace.operationState; wrapMode: Text.WordWrap }
-        Label { visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
+        Label { visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; textFormat: Text.PlainText; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
         Button { text: "Cancel geometry"; enabled: workspace.operationState.indexOf("Regenerating") === 0; onClicked: workspace.cancel() }
         Label { text: "Measurements"; font.bold: true; font.pixelSize: 18 }
         Label { text: "Volume: " + workspace.volume; wrapMode: Text.WordWrap }
