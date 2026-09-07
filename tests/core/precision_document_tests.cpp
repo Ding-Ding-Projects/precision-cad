@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QLockFile>
 #include <QTemporaryDir>
 #include <cstdio>
@@ -39,6 +40,9 @@ int main(int argc, char **argv) {
     auto unknownReference = ordered; unknownReference.features[0].inputRefs[1] = QStringLiteral("unknown"); const auto unknownEvaluation = ModelEvaluator::evaluate(unknownReference); REQUIRE(!unknownEvaluation.result.ok); REQUIRE(unknownEvaluation.ordered.isEmpty());
     auto cycle = ordered; cycle.features[1].inputRefs = {QStringLiteral("c")}; const auto cycleEvaluation = ModelEvaluator::evaluate(cycle); REQUIRE(!cycleEvaluation.result.ok); REQUIRE(cycleEvaluation.ordered.isEmpty());
     auto invalidSchema = ordered; invalidSchema.features[1].parameters.remove(QStringLiteral("dy")); const auto invalidEvaluation = ModelEvaluator::evaluate(invalidSchema); REQUIRE(!invalidEvaluation.result.ok); REQUIRE(invalidEvaluation.ordered.isEmpty());
+    auto primitiveWithInput = ordered; primitiveWithInput.features[1].inputRefs = {QStringLiteral("b")}; const auto primitiveWithInputEvaluation = ModelEvaluator::evaluate(primitiveWithInput); REQUIRE(!primitiveWithInputEvaluation.result.ok); REQUIRE(primitiveWithInputEvaluation.ordered.isEmpty());
+    auto optionalPrimitive = ordered; optionalPrimitive.features[1].parameters.insert(QStringLiteral("origin"), QJsonArray{1.0, 2.0, 3.0}); optionalPrimitive.features[2] = {QStringLiteral("b"), QStringLiteral("cylinder"), QStringLiteral("Cylinder"), {}, QJsonObject{{QStringLiteral("radius"), 1.0}, {QStringLiteral("height"), 2.0}, {QStringLiteral("origin"), QJsonArray{0.0,0.0,0.0}}, {QStringLiteral("axis"), QJsonArray{0.0,0.0,1.0}}}, false}; REQUIRE(ModelEvaluator::evaluate(optionalPrimitive).result.ok);
+    DocumentRecord nonPlanarExtrude{kDocumentSchemaVersion, QStringLiteral("extrude"), 0, QStringLiteral("mm"), {{QStringLiteral("extrude"), QStringLiteral("extrude"), QStringLiteral("Extrude"), {}, QJsonObject{{QStringLiteral("polygon"), QJsonArray{QJsonArray{0.0,0.0,0.0},QJsonArray{1.0,0.0,0.0},QJsonArray{0.0,1.0,0.1}}},{QStringLiteral("vector"),QJsonArray{0.0,0.0,1.0}}}, false}}}; REQUIRE(!ModelEvaluator::evaluate(nonPlanarExtrude).result.ok);
     Document rollback(DocumentRecord{kDocumentSchemaVersion, QStringLiteral("rollback"), 0, QStringLiteral("mm"), {box(QStringLiteral("valid"))}}); auto invalidFeature = box(QStringLiteral("invalid")); invalidFeature.parameters.insert(QStringLiteral("dx"), std::numeric_limits<double>::infinity()); REQUIRE(!rollback.addFeature(invalidFeature, 0).ok); REQUIRE(rollback.record().revision == 0 && rollback.record().features.size() == 1 && rollback.record().features[0].id == QStringLiteral("valid"));
     return 0;
 }

@@ -13,20 +13,6 @@ bool finiteNumber(const QJsonValue &value)
     return value.isDouble() && std::isfinite(value.toDouble());
 }
 
-Result requireExactly(const Feature &feature, std::initializer_list<const char *> names)
-{
-    if (feature.parameters.size() != static_cast<qsizetype>(names.size())) {
-        return Result::failure(QStringLiteral("Invalid parameter schema for feature %1").arg(feature.id));
-    }
-    for (const char *name : names) {
-        const auto value = feature.parameters.value(QLatin1StringView(name));
-        if (!finiteNumber(value) || value.toDouble() <= 0.0) {
-            return Result::failure(QStringLiteral("Feature %1 requires finite positive %2").arg(feature.id, QString::fromLatin1(name)));
-        }
-    }
-    return Result::success();
-}
-
 bool vector3(const QJsonValue &value, bool nonZero = false)
 {
     const auto values = value.toArray();
@@ -36,7 +22,24 @@ bool vector3(const QJsonValue &value, bool nonZero = false)
         if (!finiteNumber(entry) || std::abs(entry.toDouble()) > 1.0e9) return false;
         squareLength += entry.toDouble() * entry.toDouble();
     }
-    return !nonZero || squareLength > 0.0;
+    return !nonZero || squareLength > 1.0e-18;
+}
+
+Result requirePrimitive(const Feature &feature, std::initializer_list<const char *> required, std::initializer_list<const char *> optional)
+{
+    if (!feature.inputRefs.isEmpty()) return Result::failure(QStringLiteral("Primitive feature %1 cannot have inputs").arg(feature.id));
+    if (feature.parameters.size() < static_cast<qsizetype>(required.size()) || feature.parameters.size() > static_cast<qsizetype>(required.size() + optional.size())) return Result::failure(QStringLiteral("Invalid parameter schema for feature %1").arg(feature.id));
+    for (const char *name : required) {
+        const auto value = feature.parameters.value(QLatin1StringView(name));
+        if (!finiteNumber(value) || value.toDouble() <= 0.0) return Result::failure(QStringLiteral("Feature %1 requires finite positive %2").arg(feature.id, QString::fromLatin1(name)));
+    }
+    for (const auto &key : feature.parameters.keys()) {
+        bool allowed = false;
+        for (const char *name : required) allowed = allowed || key == QLatin1StringView(name);
+        for (const char *name : optional) allowed = allowed || key == QLatin1StringView(name);
+        if (!allowed) return Result::failure(QStringLiteral("Unknown parameter %1 for feature %2").arg(key, feature.id));
+    }
+    return Result::success();
 }
 
 Result requireUnary(const Feature &feature, std::initializer_list<const char *> parameters)
@@ -48,8 +51,15 @@ Result requireUnary(const Feature &feature, std::initializer_list<const char *> 
 
 Result validateFeature(const Feature &feature)
 {
-    if (feature.type == QStringLiteral("box")) return requireExactly(feature, {"dx", "dy", "dz"});
-    if (feature.type == QStringLiteral("cylinder")) return requireExactly(feature, {"radius", "height"});
+    if (feature.type == QStringLiteral("box")) {
+        if (const auto result = requirePrimitive(feature, {"dx", "dy", "dz"}, {"origin"}); !result.ok) return result;
+        return !feature.parameters.contains(QStringLiteral("origin")) || vector3(feature.parameters.value(QStringLiteral("origin"))) ? Result::success() : Result::failure(QStringLiteral("Box feature %1 has an invalid origin").arg(feature.id));
+    }
+    if (feature.type == QStringLiteral("cylinder")) {
+        if (const auto result = requirePrimitive(feature, {"radius", "height"}, {"origin", "axis"}); !result.ok) return result;
+        if (feature.parameters.contains(QStringLiteral("origin")) && !vector3(feature.parameters.value(QStringLiteral("origin")))) return Result::failure(QStringLiteral("Cylinder feature %1 has an invalid origin").arg(feature.id));
+        return !feature.parameters.contains(QStringLiteral("axis")) || vector3(feature.parameters.value(QStringLiteral("axis")), true) ? Result::success() : Result::failure(QStringLiteral("Cylinder feature %1 has an invalid axis").arg(feature.id));
+    }
     if (feature.type == QStringLiteral("union") || feature.type == QStringLiteral("cut") || feature.type == QStringLiteral("intersection")) {
         if (feature.inputRefs.size() != 2 || !feature.parameters.isEmpty()) return Result::failure(QStringLiteral("Boolean feature %1 requires two inputs and no parameters").arg(feature.id));
         return Result::success();
@@ -72,6 +82,8 @@ Result validateFeature(const Feature &feature)
         const auto polygon = feature.parameters.value(QStringLiteral("polygon")).toArray();
         if (polygon.size() < 3 || polygon.size() > 4096 || !vector3(feature.parameters.value(QStringLiteral("vector")), true)) return Result::failure(QStringLiteral("Extrude feature %1 has invalid typed parameters").arg(feature.id));
         for (const auto &point : polygon) if (!vector3(point)) return Result::failure(QStringLiteral("Extrude feature %1 has a non-finite point").arg(feature.id));
+        const double z = polygon.first().toArray().at(2).toDouble();
+        for (const auto &point : polygon) if (std::abs(point.toArray().at(2).toDouble() - z) > 1.0e-7) return Result::failure(QStringLiteral("Extrude feature %1 must use finite coplanar points").arg(feature.id));
         return Result::success();
     }
     if (feature.type == QStringLiteral("validate") || feature.type == QStringLiteral("tessellate")) {
