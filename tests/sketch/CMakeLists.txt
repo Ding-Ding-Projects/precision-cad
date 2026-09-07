@@ -13,3 +13,6 @@ endif()
 add_executable(precision_sketch_tests sketch_model_tests.cpp)
 target_link_libraries(precision_sketch_tests PRIVATE precision_sketch Qt6::Core)
 add_test(NAME precision_sketch_tests COMMAND "${CMAKE_COMMAND}" -E env "PATH=$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}" $<TARGET_FILE:precision_sketch_tests>)
+
+find_program(PRECISION_PWSH pwsh REQUIRED)
+add_test(NAME precision_sketch_solver_provenance COMMAND "${PRECISION_PWSH}" -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/solver_provenance_tests.ps1" -Verifier "${CMAKE_CURRENT_LIST_DIR}/../../src/sketch/verify_solver_source.cmake" -FixtureParent "${CMAKE_CURRENT_BINARY_DIR}/provenance-fixtures")

@@ -13,11 +13,12 @@ foreach(required include/slvs.h src/slvs/lib.cpp src/constrainteq.cpp src/entity
     message(FATAL_ERROR "SolveSpace 3.2 source is unavailable at ${PRECISION_SOLVESPACE_SOURCE}. Run scripts/bootstrap-sketch-solver.ps1.")
   endif()
 endforeach()
-file(READ "${PRECISION_SOLVESPACE_SOURCE}/.git/HEAD" precision_solvespace_head)
-string(STRIP "${precision_solvespace_head}" precision_solvespace_head)
-if(NOT precision_solvespace_head STREQUAL PRECISION_SOLVESPACE_COMMIT)
-  message(FATAL_ERROR "SolveSpace source commit is not the approved v3.2 commit.")
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/verify_solver_source.cmake")
+add_custom_target(precision_verify_sketch_solver
+  COMMAND "${CMAKE_COMMAND}" "-DPRECISION_SOLVESPACE_SOURCE=${PRECISION_SOLVESPACE_SOURCE}" "-DPRECISION_SOLVESPACE_COMMIT=${PRECISION_SOLVESPACE_COMMIT}"
+    -P "${CMAKE_CURRENT_LIST_DIR}/verify_solver_source.cmake"
+  COMMENT "Verifying immutable SolveSpace source and solver submodules"
+  VERBATIM)
 
 set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
 set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -41,3 +42,6 @@ target_compile_features(precision_sketch PUBLIC cxx_std_20)
 target_compile_definitions(precision_sketch PRIVATE STATIC_LIB LIBRARY _USE_MATH_DEFINES)
 target_include_directories(precision_sketch PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${PRECISION_SOLVESPACE_SOURCE}/include" "${PRECISION_SOLVESPACE_SOURCE}/src" "${PRECISION_SOLVESPACE_SOURCE}/extlib/eigen" "${PRECISION_SOLVESPACE_SOURCE}/extlib/mimalloc/include")
 target_link_libraries(precision_sketch PUBLIC Qt6::Core PRIVATE mimalloc-static)
+
+add_dependencies(precision_sketch precision_verify_sketch_solver)
+add_dependencies(mimalloc-static precision_verify_sketch_solver)

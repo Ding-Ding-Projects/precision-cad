@@ -78,6 +78,9 @@ struct SolvedPoint {
     SketchEntityId id = 0;
     double u = 0.0;
     double v = 0.0;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
 };
 
 struct SolvedRadius {
@@ -97,7 +100,8 @@ struct SketchSolveResult {
 
 class SketchSolver final {
 public:
-    // Uses the canonical SolveSpace 3.2 libslvs C API. Entity and constraint handles derive only from stable IDs.
+    // Uses the canonical SolveSpace 3.2 libslvs C API with checked dense handles.
+    // The immutable input retains persistent IDs; result records map back to those IDs.
     [[nodiscard]] static SketchSolveResult solve(const SketchModel &model);
 };
 
