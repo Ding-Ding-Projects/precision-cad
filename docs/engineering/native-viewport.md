@@ -17,3 +17,9 @@ Every index must be finite, integral and in range before upload. Nonfinite coord
 ## Verification
 
 `viewport-math` covers camera rays and nearest triangle, edge and vertex math. `workspace-qml` additionally instantiates production Main.qml and exercises actual camera/geometry bindings, projection and standard-view controls, fit, pan, orbit, click selection, translated multi-body input and invalid-buffer clearing. CTest prepends the configured Qt runtime directory. These checks do not replace inspection of the built application's depth rendering on a real graphics backend.
+
+## Selected-body appearance
+
+The render buffer includes per-vertex color data derived from the same body triangle ranges used for selection. The selected body uses the window accent color; other bodies use the foreground color. Changing selection only updates color bytes, preserving the camera and model positions. The tree marks the current body with a localized Selected label and the native accessibility selected state. Boolean operand tracking remains separate from the current body.
+
+The scoped native follow-up uses existing Qt Quick Controls and Qt Quick 3D primitives. The required Material Designer creation/export flow was unavailable because no runnable build existed in the inspected project or tool cache; no design preview is claimed as production evidence.

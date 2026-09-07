@@ -3,6 +3,7 @@
 #include <QVariantList>
 #include <QVector3D>
 #include <QVector>
+#include <QColor>
 #include <array>
 namespace precision::app::viewport {
 class MeshGeometry : public QQuick3DGeometry {
@@ -11,7 +12,11 @@ class MeshGeometry : public QQuick3DGeometry {
   Q_PROPERTY(QVariantList indices READ indices WRITE setIndices NOTIFY meshChanged)
   Q_PROPERTY(QVariantList normals READ normals WRITE setNormals NOTIFY meshChanged)
   Q_PROPERTY(QVariantList parts READ parts WRITE setParts NOTIFY meshChanged)
-  Q_PROPERTY(QString fallbackBodyId MEMBER m_fallbackBodyId NOTIFY meshChanged)
+  Q_PROPERTY(QString fallbackBodyId READ fallbackBodyId WRITE setFallbackBodyId NOTIFY appearanceChanged)
+  Q_PROPERTY(QString selectedBodyId READ selectedBodyId WRITE setSelectedBodyId NOTIFY appearanceChanged)
+  Q_PROPERTY(QColor baseColor READ baseColor WRITE setBaseColor NOTIFY appearanceChanged)
+  Q_PROPERTY(QColor selectionColor READ selectionColor WRITE setSelectionColor NOTIFY appearanceChanged)
+  Q_PROPERTY(int selectedTriangleCount READ selectedTriangleCount NOTIFY appearanceChanged)
   Q_PROPERTY(bool valid READ valid NOTIFY meshChanged)
   Q_PROPERTY(bool suppliedNormals READ suppliedNormals NOTIFY meshChanged)
 public:
@@ -22,6 +27,15 @@ public:
   QVariantList parts() const { return m_parts; }
   void setParts(const QVariantList &value);
   QString bodyForTriangle(int index) const;
+  QString fallbackBodyId() const { return m_fallbackBodyId; }
+  void setFallbackBodyId(const QString &value);
+  QString selectedBodyId() const { return m_selectedBodyId; }
+  void setSelectedBodyId(const QString &value);
+  QColor baseColor() const { return m_baseColor; }
+  void setBaseColor(QColor value);
+  QColor selectionColor() const { return m_selectionColor; }
+  void setSelectionColor(QColor value);
+  int selectedTriangleCount() const { return m_selectedTriangleCount; }
   bool valid() const { return m_valid; }
   bool suppliedNormals() const { return m_suppliedNormals; }
   void setVertices(const QVariantList &value);
@@ -34,8 +48,13 @@ public:
 signals:
   void meshChanged();
   void sceneChanged();
+  void appearanceChanged();
 private:
   void rebuild();
+  void updateColors();
+  QString m_selectedBodyId;
+  QColor m_baseColor{Qt::gray},m_selectionColor{Qt::yellow};
+  int m_selectedTriangleCount=0;
   QVariantList m_parts;
   QString m_fallbackBodyId;
   struct PartRange { QString bodyId; int first; int count; };

@@ -12,6 +12,7 @@
 #include "viewport/viewport_camera.h"
 #include "viewport/mesh_geometry.h"
 #include <limits>
+#include <cstring>
 class ModelRowWorkspace final : public QObject {
  Q_OBJECT
  Q_PROPERTY(QVariantList meshParts MEMBER sceneParts NOTIFY meshChanged)
@@ -97,6 +98,14 @@ private slots:
   QVERIFY(std::abs(orthographic->property("horizontalMagnification").toDouble()-camera->magnification())<1e-5);
   QCOMPARE(camera->pick(center.x(),center.y()).value("bodyId").toString(),QString("near"));
   const QPoint click=viewport->mapToScene(center).toPoint();QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,click);QCOMPARE(workspace.selectedBody(),QString("near"));
+  QCOMPARE(mesh->selectedBodyId(),QString("near"));QCOMPARE(mesh->selectedTriangleCount(),1);QCOMPARE(mesh->stride(),40);
+  QVERIFY(root->findChild<QObject*>("meshMaterial")->property("vertexColorsEnabled").toBool());
+  float unselectedRgba[4],selectedRgba[4];const auto colored=mesh->vertexData();std::memcpy(unselectedRgba,colored.constData()+24,16);std::memcpy(selectedRgba,colored.constData()+3*40+24,16);
+  QVERIFY(std::abs(unselectedRgba[0]-selectedRgba[0])+std::abs(unselectedRgba[1]-selectedRgba[1])+std::abs(unselectedRgba[2]-selectedRgba[2])>.01);
+  camera->pan(11,7);const auto selectionEye=camera->eye();const auto selectionTarget=camera->center();workspace.selectBody("far");
+  QCOMPARE(mesh->selectedBodyId(),QString("far"));QCOMPARE(mesh->selectedTriangleCount(),1);QCOMPARE(camera->eye(),selectionEye);QCOMPARE(camera->center(),selectionTarget);
+  const auto recolored=mesh->vertexData();QVERIFY(recolored!=colored);
+
   camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
   QTest::mousePress(window,Qt::RightButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(25,10));QTest::mouseRelease(window,Qt::RightButton,Qt::NoModifier,click+QPoint(25,10));QVERIFY(camera->center()!=panOrigin);
   const auto dragEye=camera->eye();QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(35,15));QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,click+QPoint(35,15));QVERIFY(camera->eye()!=dragEye);
@@ -142,6 +151,10 @@ private slots:
   QVERIFY(clickRow(0)); QCOMPARE(workspace.selectedBody(),QString("A"));
   const auto meshA=viewport->property("vertices").toList(); QVERIFY(!meshA.isEmpty());
   QVERIFY(clickRow(1)); QCOMPARE(workspace.selectedBody(),QString("B"));
+  QObject *selectedRow=tree->property("currentItem").value<QObject*>();QVERIFY(selectedRow);QVERIFY(selectedRow->property("highlighted").toBool());
+  QQmlExpression selectedState(qmlContext(selectedRow),selectedRow,"Accessible.selected");QVERIFY(selectedState.evaluate().toBool());
+  QQmlExpression selectedName(qmlContext(selectedRow),selectedRow,"Accessible.name");QVERIFY(selectedName.evaluate().toString().contains("Selected"));
+
   QCOMPARE(root->property("selectedLeft").toString(),QString("A"));
   QCOMPARE(root->property("selectedRight").toString(),QString("B"));
   QCOMPARE(viewport->property("vertices").toList(),workspace.meshVertices()); QVERIFY(viewport->property("vertices").toList()!=meshA);
