@@ -7,7 +7,7 @@ import PrecisionCad
 
 ApplicationWindow {
   id: root
-  width: 1280; height: 820; visible: true
+  width: 1280; height: 820; minimumWidth: 800; minimumHeight: 600; visible: true
   title: root.copy("Precision CAD","精準 CAD") + " · " + buildVersion
   Material.theme: preferences.theme === "dark" ? Material.Dark : preferences.theme === "light" ? Material.Light : Material.System
   Material.accent: preferences.accentColor
@@ -34,8 +34,8 @@ ApplicationWindow {
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
     objectName: "mainToolbar"
-    implicitHeight: children[0].implicitHeight + 16
-    Flow { objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
+    implicitHeight: toolbarFlow.implicitHeight
+    Flow { id: toolbarFlow; objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
       Label { textFormat: Text.PlainText; text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
       Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
       Button { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
@@ -140,17 +140,17 @@ ApplicationWindow {
       }
     }
     Pane { objectName: "inspectorPane"; SplitView.preferredWidth: 290
-      Column { objectName: "inspectorColumn"; anchors.fill: parent; spacing: 10
-        Label { textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18 }
-        Label { textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
-        Label { objectName: "rawDiagnostics"; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
+      Column { objectName: "inspectorColumn"; anchors.fill: parent; spacing: 10; clip: true
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
+        Label { objectName: "rawDiagnostics"; width: parent.width; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
         Button { text: root.copy("Cancel geometry","取消幾何運算"); enabled: workspace.busy; onClicked: workspace.cancel() }
-        Label { textFormat: Text.PlainText; text: root.copy("Measurements","量度"); font.bold: true; font.pixelSize: 18 }
-        Label { textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
-        Label { textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Measurements","量度"); font.bold: true; font.pixelSize: 18; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
-        Label { textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
-        Label { textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
+        Label { objectName: "inspectorNotice"; width: parent.width; textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
   }

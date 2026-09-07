@@ -34,6 +34,29 @@ private slots:
   root->setProperty("deferredAction","new"); root->setProperty("saveForDeferred",true); workspace.saveFinished(false,"failure"); QCOMPARE(root->property("deferredAction").toString(),QString()); QVERIFY(!root->property("saveForDeferred").toBool());
   QCOMPARE(workspace.localPath(QUrl("https://example.invalid/document")),QString()); QCOMPARE(workspace.localPath(QUrl::fromLocalFile(dir.filePath("a b.pcad"))),dir.filePath("a b.pcad"));
  }
+ void nativeLayoutGeometry() {
+  QTemporaryDir dir; QVERIFY(dir.isValid());
+  precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));
+  precision::preferences::PersonalVocabularyStore vocab(dir.filePath("private-cache.json"));
+  WorkspaceController workspace; UiText ui(&prefs,&vocab); QQmlEngine engine;
+  auto context=engine.rootContext(); context->setContextProperty("preferences",&prefs); context->setContextProperty("vocabulary",&vocab); context->setContextProperty("workspace",&workspace); context->setContextProperty("uiText",&ui); context->setContextProperty("buildVersion","test-version-with-provenance"); context->setContextProperty("buildTime","2026-09-07 14:34:01 Eastern Daylight Time");
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH))); QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+  std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString()));
+  auto *window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window);
+  auto *toolbar=root->findChild<QQuickItem*>("mainToolbar"); auto *flow=root->findChild<QQuickItem*>("toolbarFlow"); auto *workspaceSplit=root->findChild<QQuickItem*>("workspaceSplit"); auto *inspector=root->findChild<QQuickItem*>("inspectorColumn"); auto *notice=root->findChild<QQuickItem*>("inspectorNotice");
+  QVERIFY(toolbar); QVERIFY(flow); QVERIFY(workspaceSplit); QVERIFY(inspector); QVERIFY(notice);
+  const QList<QSize> sizes{{1280, 820}, {1024, 700}, {800, 600}};
+  const QStringList languages{"en", "yue", "both"};
+  const QStringList themes{"light", "dark"};
+  for (const auto &size : sizes) for (const auto &language : languages) for (const auto &theme : themes) {
+   QVERIFY(prefs.setLanguageMode(language)); QVERIFY(prefs.setTheme(theme)); window->resize(size); window->show(); QCoreApplication::processEvents(); QCoreApplication::processEvents();
+   QVERIFY2(qAbs(toolbar->height()-flow->implicitHeight()) < 0.1, "toolbar height must match the visible Flow height");
+   QVERIFY2(qAbs(workspaceSplit->y()-toolbar->height()) < 0.1, "workspace must begin below the toolbar");
+   QVERIFY2(workspaceSplit->height() >= 0, "workspace must retain a non-negative height");
+   QVERIFY2(inspector->childrenRect().width() <= inspector->width()+0.1, "inspector children must stay within their constrained column");
+   QVERIFY2(notice->width() <= inspector->width()+0.1, "long inspector notice must wrap inside the pane");
+  }
+ }
 };
 int main(int argc,char **argv) { qputenv("QT_QPA_PLATFORM","offscreen"); qputenv("QT_QUICK_CONTROLS_STYLE","Material"); QGuiApplication app(argc,argv); qmlRegisterType<MeshCanvas>("PrecisionCad",1,0,"MeshCanvas"); WorkspaceQmlTest test; return QTest::qExec(&test,argc,argv); }
 #include "tst_workspace_qml.moc"
