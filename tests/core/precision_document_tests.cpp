@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QLockFile>
 #include <QTemporaryDir>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -43,6 +44,10 @@ int main(int argc, char **argv) {
     auto primitiveWithInput = ordered; primitiveWithInput.features[1].inputRefs = {QStringLiteral("b")}; const auto primitiveWithInputEvaluation = ModelEvaluator::evaluate(primitiveWithInput); REQUIRE(!primitiveWithInputEvaluation.result.ok); REQUIRE(primitiveWithInputEvaluation.ordered.isEmpty());
     auto optionalPrimitive = ordered; optionalPrimitive.features[1].parameters.insert(QStringLiteral("origin"), QJsonArray{1.0, 2.0, 3.0}); optionalPrimitive.features[2] = {QStringLiteral("b"), QStringLiteral("cylinder"), QStringLiteral("Cylinder"), {}, QJsonObject{{QStringLiteral("radius"), 1.0}, {QStringLiteral("height"), 2.0}, {QStringLiteral("origin"), QJsonArray{0.0,0.0,0.0}}, {QStringLiteral("axis"), QJsonArray{0.0,0.0,1.0}}}, false}; REQUIRE(ModelEvaluator::evaluate(optionalPrimitive).result.ok);
     DocumentRecord nonPlanarExtrude{kDocumentSchemaVersion, QStringLiteral("extrude"), 0, QStringLiteral("mm"), {{QStringLiteral("extrude"), QStringLiteral("extrude"), QStringLiteral("Extrude"), {}, QJsonObject{{QStringLiteral("polygon"), QJsonArray{QJsonArray{0.0,0.0,0.0},QJsonArray{1.0,0.0,0.0},QJsonArray{0.0,1.0,0.1}}},{QStringLiteral("vector"),QJsonArray{0.0,0.0,1.0}}}, false}}}; REQUIRE(!ModelEvaluator::evaluate(nonPlanarExtrude).result.ok);
+    const auto assertBounded = [](Feature candidate, std::initializer_list<const char *> fields) -> int { const auto evaluate = [&candidate] { QVector<Feature> features; if (!candidate.inputRefs.isEmpty()) features.append(box(QStringLiteral("base"))); features.append(candidate); return ModelEvaluator::evaluate({kDocumentSchemaVersion, QStringLiteral("bounded"), 0, QStringLiteral("mm"), features}); }; for (const char *field : fields) { candidate.parameters.insert(QString::fromLatin1(field), 1.0e9); REQUIRE(evaluate().result.ok); candidate.parameters.insert(QString::fromLatin1(field), std::nextafter(1.0e9, std::numeric_limits<double>::infinity())); REQUIRE(!evaluate().result.ok); candidate.parameters.insert(QString::fromLatin1(field), 1.0e9 + 1.0); REQUIRE(!evaluate().result.ok); candidate.parameters.insert(QString::fromLatin1(field), 1.0); } return 0; };
+    REQUIRE(assertBounded(box(QStringLiteral("bounded-box")), {"dx", "dy", "dz"}) == 0);
+    REQUIRE(assertBounded({QStringLiteral("bounded-cylinder"), QStringLiteral("cylinder"), QStringLiteral("Cylinder"), {}, QJsonObject{{QStringLiteral("radius"), 1.0}, {QStringLiteral("height"), 1.0}}, false}, {"radius", "height"}) == 0);
+    REQUIRE(assertBounded({QStringLiteral("bounded-fillet"), QStringLiteral("fillet"), QStringLiteral("Fillet"), {QStringLiteral("base")}, QJsonObject{{QStringLiteral("radius"), 1.0}}, false}, {"radius"}) == 0);
     Document rollback(DocumentRecord{kDocumentSchemaVersion, QStringLiteral("rollback"), 0, QStringLiteral("mm"), {box(QStringLiteral("valid"))}}); auto invalidFeature = box(QStringLiteral("invalid")); invalidFeature.parameters.insert(QStringLiteral("dx"), std::numeric_limits<double>::infinity()); REQUIRE(!rollback.addFeature(invalidFeature, 0).ok); REQUIRE(rollback.record().revision == 0 && rollback.record().features.size() == 1 && rollback.record().features[0].id == QStringLiteral("valid"));
     return 0;
 }

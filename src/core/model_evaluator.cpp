@@ -13,6 +13,11 @@ bool finiteNumber(const QJsonValue &value)
     return value.isDouble() && std::isfinite(value.toDouble());
 }
 
+bool boundedPositive(const QJsonValue &value)
+{
+    return finiteNumber(value) && value.toDouble() > 0.0 && value.toDouble() <= 1.0e9;
+}
+
 bool vector3(const QJsonValue &value, bool nonZero = false)
 {
     const auto values = value.toArray();
@@ -31,7 +36,7 @@ Result requirePrimitive(const Feature &feature, std::initializer_list<const char
     if (feature.parameters.size() < static_cast<qsizetype>(required.size()) || feature.parameters.size() > static_cast<qsizetype>(required.size() + optional.size())) return Result::failure(QStringLiteral("Invalid parameter schema for feature %1").arg(feature.id));
     for (const char *name : required) {
         const auto value = feature.parameters.value(QLatin1StringView(name));
-        if (!finiteNumber(value) || value.toDouble() <= 0.0) return Result::failure(QStringLiteral("Feature %1 requires finite positive %2").arg(feature.id, QString::fromLatin1(name)));
+        if (!boundedPositive(value)) return Result::failure(QStringLiteral("Feature %1 requires finite positive bounded %2").arg(feature.id, QString::fromLatin1(name)));
     }
     for (const auto &key : feature.parameters.keys()) {
         bool allowed = false;
@@ -75,7 +80,7 @@ Result validateFeature(const Feature &feature)
     }
     if (feature.type == QStringLiteral("fillet")) {
         if (const auto result = requireUnary(feature, {"radius"}); !result.ok) return result;
-        return finiteNumber(feature.parameters.value(QStringLiteral("radius"))) && feature.parameters.value(QStringLiteral("radius")).toDouble() > 0.0 ? Result::success() : Result::failure(QStringLiteral("Fillet feature %1 requires a finite positive radius").arg(feature.id));
+        return boundedPositive(feature.parameters.value(QStringLiteral("radius"))) ? Result::success() : Result::failure(QStringLiteral("Fillet feature %1 requires a finite positive bounded radius").arg(feature.id));
     }
     if (feature.type == QStringLiteral("extrude")) {
         if (!feature.inputRefs.isEmpty() || feature.parameters.size() != 2) return Result::failure(QStringLiteral("Extrude feature %1 requires polygon and vector parameters").arg(feature.id));
