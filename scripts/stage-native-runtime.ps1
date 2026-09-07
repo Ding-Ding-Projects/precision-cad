@@ -2,7 +2,7 @@ param([string]$BinaryDirectory)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $buildRoot = Join-Path $root 'build/native'
-if (-not $BinaryDirectory) { $BinaryDirectory = Join-Path $buildRoot 'bin' }
+if (-not $BinaryDirectory) { $BinaryDirectory = Join-Path $buildRoot 'package-runtime' }
 $destination = [IO.Path]::GetFullPath($BinaryDirectory)
 $allowedRoot = [IO.Path]::GetFullPath((Join-Path $root 'build')) + [IO.Path]::DirectorySeparatorChar
 if (-not $destination.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime destination must be inside this project build directory.' }
@@ -16,11 +16,20 @@ $qtRoot = (Read-CMakeValue 'CMAKE_PREFIX_PATH').Split(';')[0]
 $qtBin = Join-Path $qtRoot 'bin'
 $compiler = Read-CMakeValue 'CMAKE_CXX_COMPILER'
 $dumpbin = Join-Path (Split-Path -Parent $compiler) 'dumpbin.exe'
-$app = Join-Path $destination 'precision_cad.exe'
-$worker = Join-Path $destination 'precision_geometry_worker.exe'
-foreach ($file in @($app,$worker,$dumpbin,(Join-Path $qtBin 'windeployqt.exe'))) {
+$sourceBin = Join-Path $buildRoot 'bin'
+$sourceApp = Join-Path $sourceBin 'precision_cad.exe'
+$sourceWorker = Join-Path $sourceBin 'precision_geometry_worker.exe'
+foreach ($file in @($sourceApp,$sourceWorker,$dumpbin,(Join-Path $qtBin 'windeployqt.exe'))) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing native runtime input: $file" }
 }
+$unexpectedSourceExecutables = @(Get-ChildItem -LiteralPath $sourceBin -Filter '*.exe' -File | Where-Object { $_.Name -notin @('precision_cad.exe','precision_geometry_worker.exe') })
+if ($unexpectedSourceExecutables.Count -gt 0) { Write-Output "Ignoring non-production build executables: $($unexpectedSourceExecutables.Name -join ', ')" }
+if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $destination | Out-Null
+$app = Join-Path $destination 'precision_cad.exe'
+$worker = Join-Path $destination 'precision_geometry_worker.exe'
+Copy-Item -LiteralPath $sourceApp -Destination $app -Force
+Copy-Item -LiteralPath $sourceWorker -Destination $worker -Force
 $provenance = Get-Content (Join-Path $buildRoot 'build-provenance.json') -Raw | ConvertFrom-Json
 $head = (git -C $root rev-parse --verify HEAD).Trim()
 if ($provenance.sourceCommit -ne $head -or (git -C $root status --porcelain)) { throw 'The native runtime must be staged from its unchanged committed source.' }
@@ -66,6 +75,11 @@ foreach ($relative in @('Qt6Core.dll','platforms/qwindows.dll','jemalloc.dll','t
     if (-not (Test-Path -LiteralPath (Join-Path $destination $relative) -PathType Leaf)) { throw "Required staged runtime is absent: $relative" }
 }
 Copy-Item -LiteralPath (Join-Path $buildRoot 'build-provenance.json') -Destination (Join-Path $destination 'build-provenance.json') -Force
-$receipt = [ordered]@{ schemaVersion=1; sourceCommit=$head; build=$provenance; applicationSha256=(Get-FileHash $app -Algorithm SHA256).Hash.ToLowerInvariant(); workerSha256=(Get-FileHash $worker -Algorithm SHA256).Hash.ToLowerInvariant(); scope='native-development-runtime'; installer=$false }
+$payload = @(Get-ChildItem -LiteralPath $destination -File -Recurse | Sort-Object FullName | ForEach-Object {
+    $relative = $_.FullName.Substring($destination.Length).TrimStart([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar).Replace('\','/')
+    [ordered]@{ path=$relative; bytes=$_.Length; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+})
+if ($payload.Count -eq 0) { throw 'Native runtime receipt cannot be written without a runtime payload inventory.' }
+$receipt = [ordered]@{ version=1; sourceCommit=$head; packageVersion=$provenance.packageVersion; architecture=$provenance.architecture; build=$provenance; applicationSha256=(Get-FileHash $app -Algorithm SHA256).Hash.ToLowerInvariant(); workerSha256=(Get-FileHash $worker -Algorithm SHA256).Hash.ToLowerInvariant(); payload=$payload; scope='native-development-runtime'; installer=$false }
 $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $buildRoot 'runtime-receipt.json') -Encoding utf8
 Write-Output "Native development runtime staged: $destination"

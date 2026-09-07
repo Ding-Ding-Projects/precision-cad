@@ -7,7 +7,7 @@ import PrecisionCad
 
 ApplicationWindow {
   id: root
-  width: 1280; height: 820; visible: true
+  width: 1280; height: 820; minimumWidth: 800; minimumHeight: 600; visible: true
   title: root.copy("Precision CAD","精準 CAD") + " · " + buildVersion
   Material.theme: preferences.theme === "dark" ? Material.Dark : preferences.theme === "light" ? Material.Light : Material.System
   Material.accent: preferences.accentColor
@@ -17,6 +17,8 @@ ApplicationWindow {
   property bool saveForDeferred: false
   property string vocabularyStatus: ""
   property string selectedLeft: ""; property string selectedRight: ""
+  property string dimensionType: ""
+  property string editTargetId: ""
   property string deferredAction: ""
   property url documentFolder: typeof initialDocumentFolder === "undefined" ? "" : initialDocumentFolder
   function copy(en, yue) {
@@ -31,25 +33,26 @@ ApplicationWindow {
   }
   function guard(action) { if(workspace.busy) return; if (workspace.dirty) { deferredAction = action; unsavedDialog.open() } else perform(action) }
   function perform(action) { if(action === "new") workspace.newDocument(); else if(action === "open") openDialog.open(); else if(action === "close") { allowClose=true; root.close() } }
+  function openDimensions() { var target=workspace.selectedBody; var dimensions=workspace.editableDimensions(target); if (!dimensions.editable || workspace.busy) return; editTargetId=target; dimensionType=dimensions.type; dimA.text=dimensions.first; dimB.text=dimensions.second; dimC.text=dimensions.type === "box" ? dimensions.third : ""; dimensionsDialog.open() }
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
     objectName: "mainToolbar"
-    implicitHeight: children[0].implicitHeight + 16
-    Flow { objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
+    implicitHeight: toolbarFlow.implicitHeight + topPadding + bottomPadding
+    Flow { id: toolbarFlow; objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
       Label { textFormat: Text.PlainText; text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
-      Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
-      Button { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
-      Button { text: root.copy("Cylinder", "圓柱"); onClicked: cylinderDialog.open() }
-      Button { text: root.copy("Union","合併"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("union", root.selectedLeft, root.selectedRight) }
-      Button { text: root.copy("Cut","切除"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("cut", root.selectedLeft, root.selectedRight) }
-      Button { text: root.copy("Intersect","相交"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("intersection", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
+      ToolButton { text: root.copy("New", "新檔"); onClicked: root.guard("new") }
+      ToolButton { text: root.copy("Cylinder", "圓柱"); onClicked: cylinderDialog.open() }
+      ToolButton { text: root.copy("Union","合併"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("union", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Cut","切除"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("cut", root.selectedLeft, root.selectedRight) }
+      ToolButton { text: root.copy("Intersect","相交"); enabled: root.selectedLeft !== "" && root.selectedRight !== ""; onClicked: workspace.booleanOperation("intersection", root.selectedLeft, root.selectedRight) }
 
-      Button { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
-      Button { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
-      Button { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
-      Button { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
-      Button { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
-      Button { text: root.copy("Settings", "設定"); onClicked: settings.open() }
+      ToolButton { text: root.copy("Undo", "復原"); onClicked: workspace.undo() }
+      ToolButton { text: root.copy("Redo", "重做"); onClicked: workspace.redo() }
+      ToolButton { text: root.copy("Fit", "置中"); onClicked: viewport.fit() }
+      ToolButton { text: root.copy("Save", "儲存"); onClicked: { root.deferredAction=""; root.saveForDeferred=false; saveDialog.open() } }
+      ToolButton { text: root.copy("Open", "開啟"); onClicked: root.guard("open") }
+      ToolButton { text: root.copy("Settings", "設定"); onClicked: settings.open() }
     }
   }
   FileDialog { id: saveDialog; currentFolder: root.documentFolder; objectName: "saveDialog"; title: root.copy("Save native Precision CAD document","儲存原生精準 CAD 文件"); fileMode: FileDialog.SaveFile; nameFilters: [root.copy("Precision CAD documents","精準 CAD 文件") + " (*.pcad)"]; onAccepted: workspace.save(workspace.localPath(selectedFile)); onRejected: { root.deferredAction=""; root.saveForDeferred=false } }
@@ -57,6 +60,7 @@ ApplicationWindow {
   FileDialog { id: vocabularyDialog; currentFolder: root.documentFolder; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
   Connections { target: workspace
     function onSaveFinished(ok, message) { var next=root.saveForDeferred ? root.deferredAction : ""; root.deferredAction=""; root.saveForDeferred=false; if(ok && next!=="") root.perform(next) }
+    function onDocumentChanged() { root.selectedLeft=""; root.selectedRight=""; if (dimensionsDialog.visible) dimensionsDialog.close(); root.editTargetId="" }
   }
   Dialog { id: unsavedDialog; objectName: "unsavedDialog"; onRejected: { root.deferredAction=""; root.saveForDeferred=false } title: (preferences.dialogEmojis ? "⚠ " : "") + root.copy("Unsaved changes","未儲存的變更"); modal: true; standardButtons: Dialog.NoButton
     Column { padding: 20; spacing: 12
@@ -115,19 +119,19 @@ ApplicationWindow {
   SplitView { objectName: "workspaceSplit"; anchors.fill: parent
     Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
       Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
-        Label { textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
-        ListView { id: tree; width: parent.width; height: parent.height - 170; model: workspace.features; clip: true
+        Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
+        ListView { id: tree; objectName: "modelTree"; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
           delegate: ItemDelegate { width: tree.width; highlighted: root.selectedLeft === modelData.id || root.selectedRight === modelData.id
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id; workspace.selectBody(modelData.id) }
-            contentItem: Row { spacing: 8
-              Label { textFormat: Text.PlainText; text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: 224; elide: Text.ElideRight }
-              Switch { Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
+            contentItem: Row { id: modelRow; objectName: "modelRow"; width: parent.width; spacing: 8
+              Label { id: modelRowLabel; objectName: "modelRowLabel"; textFormat: Text.PlainText; text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, modelRow.width - includeBody.implicitWidth - modelRow.spacing); elide: Text.ElideRight }
+              Switch { id: includeBody; objectName: "modelRowIncludeSwitch"; Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
             }
           }
         }
-        Button { text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: root.selectedLeft !== ""; onClicked: dimensionsDialog.open() }
-        Label { objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: !workspace.busy && workspace.editableDimensions(workspace.selectedBody).editable; onClicked: root.openDimensions() }
+        Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
     Pane { SplitView.fillWidth: true
@@ -140,30 +144,33 @@ ApplicationWindow {
       }
     }
     Pane { objectName: "inspectorPane"; SplitView.preferredWidth: 290
-      Column { objectName: "inspectorColumn"; anchors.fill: parent; spacing: 10
-        Label { textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18 }
-        Label { textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
-        Label { objectName: "rawDiagnostics"; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
+      ScrollView { id: inspectorScroll; objectName: "inspectorScroll"; anchors.fill: parent; contentWidth: availableWidth
+      Column { objectName: "inspectorColumn"; width: inspectorScroll.availableWidth; spacing: 10
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Operation","運算"); font.bold: true; font.pixelSize: 18; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: workspace.busy ? root.copy("Regenerating","重新生成中") : workspace.operationState === "Ready" ? root.copy("Ready","就緒") : workspace.operationState === "Cancelled" ? root.copy("Cancelled","已取消") : root.copy("Failed","未能完成"); wrapMode: Text.WordWrap }
+        Label { objectName: "rawDiagnostics"; width: parent.width; textFormat: Text.PlainText; visible: workspace.errorMessage.length > 0; text: workspace.errorMessage; color: Material.color(Material.Red); wrapMode: Text.WordWrap }
         Button { text: root.copy("Cancel geometry","取消幾何運算"); enabled: workspace.busy; onClicked: workspace.cancel() }
-        Label { textFormat: Text.PlainText; text: root.copy("Measurements","量度"); font.bold: true; font.pixelSize: 18 }
-        Label { textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
-        Label { textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Measurements","量度"); font.bold: true; font.pixelSize: 18; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Volume:","體積：") + " " + workspace.volume; wrapMode: Text.WordWrap }
+        Label { width: parent.width; textFormat: Text.PlainText; text: root.copy("Bounds:","邊界：") + " " + workspace.bounds; wrapMode: Text.WordWrap }
         Rectangle { width: parent.width; height: 1; color: "#555b66" }
-        Label { textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
-        Label { textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+        Label { objectName: "versionInfo"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Version","版本") + " " + buildVersion + "\n" + root.copy("Updated","更新時間") + " " + buildTime; wrapMode: Text.WordWrap }
+        Label { objectName: "inspectorNotice"; width: parent.width; textFormat: Text.PlainText; text: root.copy("CAM, FEA, advanced editing, and the complete settings and history suite are unfinished in this modelling slice.","此建模階段尚未完成 CAM、FEA、圓角編輯及完整歷史功能。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+      }
       }
     }
   }
   Dialog { id: dimensionsDialog; title: root.copy("Edit dimensions","編輯尺寸"); modal: true; standardButtons: Dialog.NoButton
     footer: DialogButtonBox { Button { text: root.copy("OK","確定"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole } Button { text: root.copy("Cancel","取消"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole } }
-    onAccepted: workspace.updateDimensions(root.selectedLeft, Number(dimA.text), Number(dimB.text), Number(dimC.text))
+    onAccepted: { if (root.editTargetId !== "" && !workspace.busy) workspace.updateDimensions(root.editTargetId, Number(dimA.text), Number(dimB.text), root.dimensionType === "box" ? Number(dimC.text) : 1); root.editTargetId="" }
+    onRejected: root.editTargetId=""
     Grid { columns:2; padding:16; spacing:8
-      Label { textFormat: Text.PlainText; text: root.copy("First","第一尺寸") }
-      TextField { id:dimA; text:"10" }
-      Label { textFormat: Text.PlainText; text: root.copy("Second","第二尺寸") }
-      TextField { id:dimB; text:"10" }
-      Label { textFormat: Text.PlainText; text: root.copy("Third (box)","第三尺寸（方盒）") }
-      TextField { id:dimC; text:"10" }
+      Label { textFormat: Text.PlainText; text: root.dimensionType === "cylinder" ? root.copy("Radius (mm)","半徑（毫米）") : root.copy("X (mm)","X（毫米）") }
+      TextField { id:dimA; validator: DoubleValidator { bottom: 0.001 } }
+      Label { textFormat: Text.PlainText; text: root.dimensionType === "cylinder" ? root.copy("Height (mm)","高度（毫米）") : root.copy("Y (mm)","Y（毫米）") }
+      TextField { id:dimB; validator: DoubleValidator { bottom: 0.001 } }
+      Label { visible: root.dimensionType === "box"; textFormat: Text.PlainText; text: root.copy("Z (mm)","Z（毫米）") }
+      TextField { id:dimC; visible: root.dimensionType === "box"; validator: DoubleValidator { bottom: 0.001 } }
     }
   }
 }

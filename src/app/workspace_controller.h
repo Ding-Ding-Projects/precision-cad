@@ -36,6 +36,7 @@ public:
   Q_INVOKABLE void booleanOperation(const QString &operation, const QString &left, const QString &right);
   Q_INVOKABLE void suppressFeature(const QString &id, bool suppressed);
   Q_INVOKABLE void updateDimensions(const QString &id, double first, double second, double third = 0.0);
+  Q_INVOKABLE QVariantMap editableDimensions(const QString &id) const;
   Q_INVOKABLE void undo(); Q_INVOKABLE void redo(); Q_INVOKABLE void cancel(); Q_INVOKABLE void save(const QString &path); Q_INVOKABLE void open(const QString &path);
   Q_INVOKABLE void newDocument();
 signals:
