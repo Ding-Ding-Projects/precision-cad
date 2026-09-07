@@ -12,6 +12,8 @@ The product architecture, roadmap and public repository are established. The ini
 
 The native development release route is `build-installer.bat /s`. It builds with `BUILD_TESTING=OFF`, stages Qt and pinned Open CASCADE runtime files, creates a NuGet input package, and calls genuine Squirrel.Windows `Squirrel.com --releasify` synchronously. Its required local outputs are `Setup.exe`, `RELEASES`, and one or more `*-full.nupkg` files in a candidate-specific `artifacts/native/squirrel-windows/<commit>` directory. The package is intentionally unsigned. It does not publish a release, run an installer, or prove a fresh-machine bootstrap.
 
+All root batch bootstrap wrappers now run the inbox Windows PowerShell host with a child-only Windows PowerShell module path. This preserves built-in hash and utility commands when the parent environment contains PowerShell 7 module locations. The regression script is `tests/scripts/windows-powershell-bootstrap.test.ps1`; it checks the wrapper contract and a polluted module-path child process.
+
 ## Next work
 
 Complete fresh-machine acquisition for Qt and MSVC, updater behavior, broader CAD capabilities, and the remaining professional-suite acceptance scenarios. Keep all subsequent increments explicitly incomplete until their acceptance scenarios pass.

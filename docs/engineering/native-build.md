@@ -4,6 +4,8 @@ The native C++20/Qt/Open CASCADE development foundation builds locally through `
 
 Run `build-desktop.bat` to configure and build the native targets. The script reads `manifests/native-dependencies.json`, uses a user-scoped cache, verifies the official Open CASCADE archive SHA-256 values, activates the detected x64 MSVC environment for this process only, and sets `BUILD_TESTING=OFF` unless a caller explicitly requests test targets.
 
+Each root batch wrapper invokes the inbox Windows PowerShell host with a child-only `PSModulePath` containing its Windows PowerShell module directories. This prevents a parent PowerShell 7 session from making Windows PowerShell 5.1 resolve incompatible module locations and losing built-in commands such as `Get-FileHash`. The caller's environment is unchanged. Run `powershell -NoProfile -ExecutionPolicy Bypass -File tests/scripts/windows-powershell-bootstrap.test.ps1` to check the wrapper contract and the polluted-path regression.
+
 The root CMake project composes the independent document, geometry, preference, history and desktop targets. Generated build provenance records the version, exact Git source commit and actual UTC configuration time. The native command interface and geometric worker remain separate processes.
 
 ## Current acquisition boundary
