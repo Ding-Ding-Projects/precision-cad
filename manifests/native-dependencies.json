@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "target": "windows-x64",
+  "compiler": { "family": "msvc", "toolset": "14.44", "sdk": "10.0.26100.0" },
+  "cmake": { "minimum": "3.29.0" },
+  "qt": { "version": "6.8.3", "architecture": "msvc2022_64", "modules": ["Core", "Gui", "Qml", "Quick", "QuickControls2", "OpenGL"] },
+  "occt": {
+    "version": "8.0.1",
+    "archiveUrl": "https://github.com/Open-Cascade-SAS/OCCT/releases/download/V8.0.1/opencascade-release-no-pch.zip",
+    "sha256": "307f694f1d4a280c7f58ee2ddb69a7f7e2b78d82749339efd40ce8b8b116d76c",
+    "archiveName": "opencascade-release-no-pch.zip",
+    "innerArchive": "opencascade-8.0.1-vc14-64.zip",
+    "root": "opencascade-8.0.1-vc14-64"
+  },
+  "occtSupport": {
+    "archiveUrl": "https://github.com/Open-Cascade-SAS/OCCT/releases/download/V8.0.1/3rdparty-vc14-64.zip",
+    "sha256": "12d04f688c583b8e896758f65cd7012458fee921cedb792ec6caaf469b372598",
+    "archiveName": "3rdparty-vc14-64.zip",
+    "innerArchive": "3rdparty-vc14-64.zip",
+    "root": "3rdparty-vc14-64"
+  },
+  "futureAdapters": { "sketchSolver": "SolveSpace 3.2, integration pending", "mesher": "Gmsh, acquisition and integration pending", "analysisSolver": "CalculiX, acquisition and integration pending" }
+}
