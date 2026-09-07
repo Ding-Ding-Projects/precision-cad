@@ -131,13 +131,13 @@ ApplicationWindow {
       Column { objectName: "modelColumn"; width: modelScroll.availableWidth; height: Math.max(modelScroll.availableHeight, modelHeader.implicitHeight + editDimensionsButton.implicitHeight + selectionHelp.implicitHeight + spacing * 3 + 100); spacing: 8
         Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
         ListView { id: tree; objectName: "modelTree"; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
-          delegate: ItemDelegate { width: tree.width; highlighted: workspace.selectedBody === modelData.id
+          delegate: ItemDelegate { id: modelDelegate; width: tree.width; highlighted: workspace.selectedBody === modelData.id
             Accessible.role: Accessible.ListItem
             Accessible.selected: workspace.selectedBody === modelData.id
             Accessible.name: modelData.label + (workspace.selectedBody === modelData.id ? " " + root.copy("Selected", "已選取") : "")
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id; workspace.selectBody(modelData.id) }
-            contentItem: Row { id: modelRow; objectName: "modelRow"; width: parent.width; spacing: 8
+            contentItem: Row { id: modelRow; objectName: "modelRow"; width: modelDelegate.availableWidth; spacing: 8
               Label { id: modelRowLabel; objectName: "modelRowLabel"; textFormat: Text.PlainText; text: (workspace.selectedBody === modelData.id ? root.copy("Selected", "已選取") + " · " : "") + (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0,8); anchors.verticalCenter: parent.verticalCenter; width: Math.max(0, modelRow.width - includeBody.implicitWidth - modelRow.spacing); elide: Text.ElideRight }
               Switch { id: includeBody; objectName: "modelRowIncludeSwitch"; Accessible.name: root.copy("Include body","啟用實體"); checked: !modelData.suppressed; onToggled: workspace.suppressFeature(modelData.id, !checked) }
             }
