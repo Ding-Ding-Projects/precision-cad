@@ -1,8 +1,8 @@
 # Native desktop build
 
-The native build is being integrated. It is not yet a verified fresh-machine or release-packaging route.
+The native C++20/Qt/Open CASCADE development foundation builds locally through `build-desktop.bat`. It is not yet a verified fresh-machine route.
 
-Run `build-desktop.bat -Test` to configure the C++20/Qt/Open CASCADE targets and execute local tests once the implementation modules are integrated. The script reads `manifests/native-dependencies.json`, uses a user-scoped cache, verifies the official Open CASCADE archive SHA-256 values, and activates the detected x64 MSVC environment for this process only.
+Run `build-desktop.bat` to configure and build the native targets. The script reads `manifests/native-dependencies.json`, uses a user-scoped cache, verifies the official Open CASCADE archive SHA-256 values, activates the detected x64 MSVC environment for this process only, and sets `BUILD_TESTING=OFF` unless a caller explicitly requests test targets.
 
 The root CMake project composes the independent document, geometry, preference, history and desktop targets. Generated build provenance records the version, exact Git source commit and actual UTC configuration time. The native command interface and geometric worker remain separate processes.
 
@@ -12,7 +12,7 @@ Open CASCADE 8.0.1 and its supporting archive are acquired automatically from of
 
 Qt 6.8.3 and MSVC are discovered from supported local installation/cache routes. Their fully automatic fresh-machine acquisition, cache-content integrity inventory, concurrent activation journal, and final runtime bundling are not implemented by this initial route. Missing tools fail with an explicit message; the script does not modify unrelated toolchains.
 
-The desktop installer is not implemented yet. A successful native development build is not evidence of an unsigned Squirrel.Windows package or an installed application.
+`build-installer.bat /s` builds the native payload, stages the runtime, creates a NuGet input package, and runs the pinned genuine Squirrel.Windows tooling. It requires and records `Setup.exe`, `RELEASES`, and at least one `*-full.nupkg` in `artifacts/native/squirrel-windows/<candidate-commit>`. The package is intentionally unsigned and the script neither launches nor installs it. It is local construction evidence only, not fresh-machine, installation, runtime, update, or release evidence.
 
 ## Development runtime staging
 

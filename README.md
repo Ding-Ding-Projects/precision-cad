@@ -6,13 +6,19 @@ The product combines a native C++20/Qt desktop interface with Open CASCADE geome
 
 ## Build
 
-The supported entry point being implemented is:
+Build the native desktop development payload with:
 
 ```powershell
-.\build.bat --run
+.\build-desktop.bat
 ```
 
-Until the bootstrap and packaged application are verified, this command is not claimed to work on a fresh installation. See [ROADMAP.md](ROADMAP.md) and [HANDOFF.md](HANDOFF.md) for the actual delivery state.
+Create the local unsigned Squirrel.Windows development package with:
+
+```powershell
+.\build-installer.bat /s
+```
+
+The native commands use the supported local Qt 6.8.3 and MSVC caches plus the pinned Open CASCADE archives. Fresh-machine Qt and MSVC acquisition is incomplete. `build.bat` remains the separate website bootstrap and static-site build entry point.
 
 ## Documentation
 
@@ -31,12 +37,6 @@ Source is intended for distribution under GPL-3.0-or-later. Third-party componen
 - [Discussions](https://github.com/Ding-Ding-Projects/precision-cad/discussions)
 - [Issue tracker](https://github.com/Ding-Ding-Projects/precision-cad/issues)
 - [Website build details](docs/engineering/build.md)
-
-The native development build is available through `build-desktop.bat`. The unsigned Windows development installer is produced locally through:
-
-```powershell
-.\build-installer.bat /s
-```
 
 It writes `Setup.exe`, `RELEASES`, and a full `.nupkg` under the candidate-specific directory `artifacts/native/squirrel-windows/<commit>`. It does not publish, tag, or create a release. The installer is unsigned and Windows will show an unknown-publisher warning.
 

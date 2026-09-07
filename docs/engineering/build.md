@@ -1,6 +1,6 @@
 # Website build and deployment
 
-The current executable build scope is the project website. The desktop CAD application is not implemented yet, so this pipeline cannot produce a desktop installer.
+The website and native desktop build routes are separate. This page documents the static website route; the native C++20/Qt/Open CASCADE development route and local unsigned Squirrel.Windows package construction are documented in [native-build.md](native-build.md).
 
 `build.bat` invokes the PowerShell bootstrap, which acquires Node.js 22.23.2 from its official distribution and verifies its ZIP SHA-256 before extraction. The website uses a committed npm lockfile. Run `npm run build` under that runtime to export the React/Vinext application and stage its public output in `dist/`.
 
