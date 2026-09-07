@@ -4,7 +4,7 @@ Checked items require implementation and verification. Intermediate builds are n
 
 ## Foundation
 - [x] Publish development prerelease `v0.1.0-dev.20260907.1` with unsigned `Setup.exe`, `RELEASES`, and a full `.nupkg` (installer execution, installed-runtime proof, updater behavior, and full release remain incomplete)
-- [ ] Reproducible Windows bootstrap and native build (native build and local Squirrel package route exist; fresh-machine acquisition remains incomplete)
+- [ ] Reproducible Windows bootstrap and native build (final source completed 6/6 focused CTest targets and the canonical local Squirrel package route; fresh-machine acquisition remains incomplete)
 - [ ] Versioned document model, transactions, undo and redo
 - [ ] Atomic save, exclusive writer protection and crash recovery
 - [ ] Isolated cancellable geometry operations
@@ -32,7 +32,7 @@ Checked items require implementation and verification. Intermediate builds are n
 - [ ] Versioned scripting/command API
 - [ ] Complete per-surface feature inventory and negative regressions
 - [ ] Accessible localized desktop and offline documentation
-- [ ] Deterministic design parity and built UI evidence
+- [ ] Deterministic design parity and built UI evidence (19 focused per-click native states and final icon/minimum-size captures exist; complete front-screen and display-scale evidence remains incomplete)
 - [ ] Unsigned Squirrel.Windows installer and explicit-restart updates (local Squirrel package route exists; updater work remains)
 - [ ] Verified public release, download assets and provenance
 
