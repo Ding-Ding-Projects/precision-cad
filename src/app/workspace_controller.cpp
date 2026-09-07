@@ -26,6 +26,7 @@ WorkspaceController::WorkspaceController(QObject *parent)
   connect(&m_worker, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this](int exitCode, QProcess::ExitStatus status) {
     m_timeout.stop(); releaseWorkerLimits(); if (!m_candidate) return;
     const QByteArray output = m_worker.readAllStandardOutput(); const QByteArray errors = m_worker.readAllStandardError();
+    if (output.size() > kMaxWorkerReply) { fail(tr("Geometry worker reply exceeded the configured limit.")); return; }
     if (status != QProcess::NormalExit || exitCode != 0) { fail(tr("Geometry worker stopped: %1").arg(QString::fromUtf8(errors.left(512)))); return; }
     QJsonParseError jsonError; const QJsonDocument json = QJsonDocument::fromJson(output, &jsonError);
     if (jsonError.error != QJsonParseError::NoError || !json.isObject()) { fail(tr("Geometry worker returned invalid JSON.")); return; }
