@@ -25,6 +25,11 @@ set(PRECISION_CAD_INTERNAL_NAME "precision_cad")
 set(PRECISION_CAD_ORIGINAL_FILENAME "precision_cad.exe")
 configure_file("${CMAKE_CURRENT_LIST_DIR}/../../resources/native-version.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/precision_cad_version.rc" @ONLY)
 set_target_properties(precision_cad PROPERTIES AUTOMOC ON AUTORCC ON AUTOUIC ON)
+qt_add_resources(precision_cad "precision_cad_window_icon"
+  PREFIX "/precision-cad"
+  BASE "${CMAKE_CURRENT_LIST_DIR}/../../assets"
+  FILES "${CMAKE_CURRENT_LIST_DIR}/../../assets/precision-cad.ico"
+)
 
 qt_add_qml_module(precision_cad
   URI PrecisionCad
