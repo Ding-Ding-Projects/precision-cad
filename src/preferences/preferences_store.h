@@ -77,6 +77,7 @@ private:
     struct Values;
     bool replace(const Values &candidate, bool forcePersist = false);
     bool persist(const Values &candidate);
+    bool preserveCorruptRecord();
     void load();
     void fail(const QString &message);
     void publishChanges(const Values &before);
@@ -84,6 +85,7 @@ private:
     QString m_storagePath;
     QString m_lastError;
     QByteArray m_revisionDigest;
+    bool m_loadedCorrupt = false;
 };
 
 } // namespace precision::preferences

@@ -97,7 +97,7 @@ bool PreferencesStore::setEnglishVoiceId(const QString &v) { if (!validVoice(v))
 bool PreferencesStore::setCantoneseVoiceId(const QString &v) { if (!validVoice(v)) { fail("cantoneseVoiceId is invalid"); return false; } auto c=*m_values; c.cantoneseVoiceId=v; return replace(c); }
 bool PreferencesStore::setNarrationRate(double v) { if (!validFinite(v,kMinNarration,kMaxNarration)) { fail("narrationRate must be from 0.5 to 2.0"); return false; } auto c=*m_values; c.narrationRate=v; return replace(c); }
 bool PreferencesStore::setNarrationPitch(double v) { if (!validFinite(v,kMinNarration,kMaxNarration)) { fail("narrationPitch must be from 0.5 to 2.0"); return false; } auto c=*m_values; c.narrationPitch=v; return replace(c); }
-bool PreferencesStore::reset() { return replace(Values{}, true); }
+bool PreferencesStore::reset() { if (m_loadedCorrupt && !preserveCorruptRecord()) return false; return replace(Values{}, true); }
 
 bool PreferencesStore::replace(const Values &candidate, bool forcePersist) {
     const Values before=*m_values;
@@ -112,32 +112,39 @@ bool PreferencesStore::persist(const Values &v) {
     if (!lock.tryLock(0)) { fail("preferences are busy in another writer"); return false; }
     QFile current(m_storagePath);
     QByteArray currentBytes;
-    if (current.exists()) { if (!current.open(QIODevice::ReadOnly) || current.size() > kMaxPreferencesBytes) { fail("preferences cannot be safely read for write"); return false; } currentBytes = current.readAll(); }
+    if (current.exists()) { if (!current.open(QIODevice::ReadOnly) || current.size() > kMaxPreferencesBytes) { fail("preferences cannot be safely read for write"); return false; } currentBytes = current.readAll(); current.close(); }
     if (QCryptographicHash::hash(currentBytes, QCryptographicHash::Sha256) != m_revisionDigest) { fail("preferences changed by another writer; reload before retrying"); return false; }
     QJsonObject root{{"schemaVersion",kSchemaVersion},{"languageMode",v.languageMode},{"englishTone",v.englishTone},{"cantoneseTone",v.cantoneseTone},{"dialogEmojis",v.dialogEmojis},{"theme",v.theme},{"fontScale",v.fontScale},{"accentColor",v.accentColor},{"reducedMotion",v.reducedMotion},{"adhdMode",v.adhdMode},{"narrationEnabled",v.narrationEnabled},{"narrationLanguage",v.narrationLanguage},{"englishVoiceId",v.englishVoiceId},{"cantoneseVoiceId",v.cantoneseVoiceId},{"narrationRate",v.narrationRate},{"narrationPitch",v.narrationPitch}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
     QSaveFile output(m_storagePath); if (!output.open(QIODevice::WriteOnly)) { fail("preferences file cannot be opened for atomic write"); return false; }
     if (output.write(bytes) != bytes.size() || !output.commit()) { fail("preferences atomic write failed"); return false; }
-    m_revisionDigest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
+    QFile committed(m_storagePath); if (!committed.open(QIODevice::ReadOnly)) { fail("preferences atomic write could not be verified"); return false; }
+    m_revisionDigest = QCryptographicHash::hash(committed.readAll(), QCryptographicHash::Sha256);
     return true;
 }
 
 void PreferencesStore::load() {
     QFile input(m_storagePath); if (!input.exists()) { m_revisionDigest = QCryptographicHash::hash({}, QCryptographicHash::Sha256); return; }
     if (!input.open(QIODevice::ReadOnly)) { fail("preferences cannot be read; defaults retained"); return; }
-    if (input.size() > kMaxPreferencesBytes) { fail("preferences are too large; defaults retained"); return; }
+    if (input.size() > kMaxPreferencesBytes) { m_loadedCorrupt=true; fail("preferences are too large; defaults retained"); return; }
     const QByteArray bytes = input.readAll(); m_revisionDigest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
     QJsonParseError error; const QJsonDocument doc=QJsonDocument::fromJson(bytes,&error);
     const QSet<QString> allowed={"schemaVersion","languageMode","englishTone","cantoneseTone","dialogEmojis","theme","fontScale","accentColor","reducedMotion","adhdMode","narrationEnabled","narrationLanguage","englishVoiceId","cantoneseVoiceId","narrationRate","narrationPitch"};
     const QJsonObject o=doc.object();
     const auto keys = o.keys();
-    if (error.error!=QJsonParseError::NoError || !doc.isObject() || QSet<QString>(keys.cbegin(), keys.cend())!=allowed || o.value("schemaVersion").toInt(-1)!=kSchemaVersion) { fail("preferences are unsupported or corrupt; defaults retained"); return; }
+    if (error.error!=QJsonParseError::NoError || !doc.isObject() || QSet<QString>(keys.cbegin(), keys.cend())!=allowed || o.value("schemaVersion").toInt(-1)!=kSchemaVersion) { m_loadedCorrupt=true; fail("preferences are unsupported or corrupt; defaults retained"); return; }
     Values v;
-    auto invalid=[&](){ fail("preferences contain invalid values; defaults retained"); };
+    auto invalid=[&](){ m_loadedCorrupt=true; fail("preferences contain invalid values; defaults retained"); };
     if (!o.value("languageMode").isString()||!o.value("englishTone").isDouble()||!o.value("cantoneseTone").isDouble()||!o.value("dialogEmojis").isBool()||!o.value("theme").isString()||!o.value("fontScale").isDouble()||!o.value("accentColor").isString()||!o.value("reducedMotion").isBool()||!o.value("adhdMode").isBool()||!o.value("narrationEnabled").isBool()||!o.value("narrationLanguage").isString()||!o.value("englishVoiceId").isString()||!o.value("cantoneseVoiceId").isString()||!o.value("narrationRate").isDouble()||!o.value("narrationPitch").isDouble()) { invalid(); return; }
     v.languageMode=o["languageMode"].toString(); v.englishTone=o["englishTone"].toInt(); v.cantoneseTone=o["cantoneseTone"].toInt(); v.dialogEmojis=o["dialogEmojis"].toBool(); v.theme=o["theme"].toString(); v.fontScale=o["fontScale"].toDouble(); v.accentColor=o["accentColor"].toString(); v.reducedMotion=o["reducedMotion"].toBool(); v.adhdMode=o["adhdMode"].toBool(); v.narrationEnabled=o["narrationEnabled"].toBool(); v.narrationLanguage=o["narrationLanguage"].toString(); v.englishVoiceId=o["englishVoiceId"].toString(); v.cantoneseVoiceId=o["cantoneseVoiceId"].toString(); v.narrationRate=o["narrationRate"].toDouble(); v.narrationPitch=o["narrationPitch"].toDouble();
     if (!oneOf(v.languageMode,{"en","yue","both"})||v.englishTone<1||v.englishTone>5||v.cantoneseTone<1||v.cantoneseTone>5||!oneOf(v.theme,{"light","dark","system"})||!validFinite(v.fontScale,kMinFontScale,kMaxFontScale)||!validAccent(v.accentColor)||!oneOf(v.narrationLanguage,{"en","yue","both"})||!validVoice(v.englishVoiceId)||!validVoice(v.cantoneseVoiceId)||!validFinite(v.narrationRate,kMinNarration,kMaxNarration)||!validFinite(v.narrationPitch,kMinNarration,kMaxNarration)) { invalid(); return; }
     *m_values=v;
+}
+bool PreferencesStore::preserveCorruptRecord() {
+    QFile input(m_storagePath); if (!input.open(QIODevice::ReadOnly) || input.size()>kMaxPreferencesBytes) { fail("corrupt preferences cannot be preserved safely"); return false; }
+    const QByteArray raw=input.readAll(); QSaveFile evidence(m_storagePath+".corrupt");
+    if (!evidence.open(QIODevice::WriteOnly) || evidence.write(raw)!=raw.size() || !evidence.commit()) { fail("corrupt preferences evidence could not be preserved"); return false; }
+    return true;
 }
 
 QByteArray PreferencesStore::exportPublicPreferences() const {
