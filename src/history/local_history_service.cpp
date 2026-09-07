@@ -1,7 +1,9 @@
 #include "history/local_history_service.h"
+#include "precision_document.h"
 
 #include <QDir>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -11,6 +13,7 @@
 #include <QSaveFile>
 #include <QLockFile>
 #include <QUuid>
+#include <QTemporaryFile>
 
 namespace precision::history {
 namespace {
@@ -54,26 +57,31 @@ bool LocalHistoryService::initialized(HistoryError *error) const {
     return true;
 }
 
-LocalHistoryService::ProcessResult LocalHistoryService::git(const QStringList &arguments, int timeoutMs) const {
+LocalHistoryService::ProcessResult LocalHistoryService::git(const QStringList &arguments, int timeoutMs, const QProcessEnvironment &extraEnvironment) const {
     ProcessResult result;
     QProcess process;
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     env.insert(QStringLiteral("GCM_INTERACTIVE"), QStringLiteral("Never"));
     env.insert(QStringLiteral("GIT_ASKPASS"), QStringLiteral(""));
+    for (const QString &key : extraEnvironment.keys()) env.insert(key, extraEnvironment.value(key));
     process.setProcessEnvironment(env);
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.setProgram(m_git);
     process.setArguments(arguments);
     process.start();
     if (!process.waitForStarted(3000)) { result.error = process.errorString().toUtf8(); return result; }
-    if (!process.waitForFinished(timeoutMs)) { result.timedOut = true; process.kill(); process.waitForFinished(2000); return result; }
+    QElapsedTimer timer; timer.start(); bool excessive = false;
+    const auto drain = [&]() {
+        result.output += process.readAllStandardOutput(); result.error += process.readAllStandardError();
+        if (result.output.size() > kMaximumProcessOutput || result.error.size() > kMaximumProcessOutput) excessive = true;
+    };
+    while (process.state() != QProcess::NotRunning && timer.elapsed() < timeoutMs && !excessive) { process.waitForReadyRead(qMin(50, qMax(1, timeoutMs - int(timer.elapsed())))); drain(); }
+    if (process.state() != QProcess::NotRunning) { result.timedOut = !excessive; process.kill(); process.waitForFinished(2000); }
+    drain();
+    if (excessive) { result.exitCode = -1; result.error = "Git output exceeded the local history limit."; return result; }
+    if (result.timedOut) return result;
     result.exitCode = process.exitCode();
-    result.output = process.readAllStandardOutput();
-    result.error = process.readAllStandardError();
-    if (result.output.size() > kMaximumProcessOutput || result.error.size() > kMaximumProcessOutput) {
-        result.exitCode = -1; result.error = "Git output exceeded the local history limit.";
-    }
     return result;
 }
 
@@ -125,13 +133,9 @@ bool LocalHistoryService::validSelectedPath(const QString &relativePath, QString
 
 bool LocalHistoryService::validateDocument(const QByteArray &bytes, HistoryError *error) const {
     if (bytes.isEmpty() || bytes.size() > kMaximumDocumentBytes) { setError(error, QStringLiteral("invalid-document-size"), QStringLiteral("The native document exceeds the local history size limit.")); return false; }
-    QJsonParseError parse; const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parse);
-    if (parse.error != QJsonParseError::NoError || !doc.isObject()) { setError(error, QStringLiteral("invalid-document-json"), QStringLiteral("The historical native document is not valid JSON.")); return false; }
-    const QJsonObject object = doc.object();
-    const auto validString = [&object](const char *key) { return object.value(QLatin1String(key)).isString() && !object.value(QLatin1String(key)).toString().isEmpty(); };
-    if (!object.value(QStringLiteral("schemaVersion")).isDouble() || object.value(QStringLiteral("schemaVersion")).toInt() < 1 || !validString("documentId") || !object.value(QStringLiteral("revision")).isDouble() || object.value(QStringLiteral("revision")).toDouble() < 0 || !validString("units") || !object.value(QStringLiteral("features")).isArray()) {
-        setError(error, QStringLiteral("invalid-native-schema"), QStringLiteral("The historical file does not satisfy the native document record boundary.")); return false;
-    }
+    precision::core::DocumentRecord record;
+    const auto parsed = precision::core::Document::parse(bytes, &record);
+    if (!parsed.ok) { setError(error, QStringLiteral("invalid-native-schema"), parsed.error); return false; }
     return true;
 }
 

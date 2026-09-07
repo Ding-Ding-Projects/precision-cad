@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QDateTime>
 #include <QJsonObject>
+#include <QProcessEnvironment>
 #include <QStringList>
 #include <QVector>
 
@@ -33,7 +34,7 @@ public:
     bool applyRestore(const RestorePreview &preview, HistoryError *error = nullptr);
 private:
     struct ProcessResult { int exitCode = -1; bool timedOut = false; QByteArray output; QByteArray error; };
-    [[nodiscard]] ProcessResult git(const QStringList &arguments, int timeoutMs = 10000) const;
+    [[nodiscard]] ProcessResult git(const QStringList &arguments, int timeoutMs = 10000, const QProcessEnvironment &extraEnvironment = {}) const;
     [[nodiscard]] bool validSelectedPath(const QString &relativePath, QString *absolutePath = nullptr, HistoryError *error = nullptr) const;
     [[nodiscard]] bool validateDocument(const QByteArray &bytes, HistoryError *error = nullptr) const;
     [[nodiscard]] bool initialized(HistoryError *error = nullptr) const;
