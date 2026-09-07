@@ -1,6 +1,7 @@
 add_library(precision_core STATIC
   precision_document.cpp
   model_evaluator.cpp
+  dimensional_expression.cpp
 )
 target_compile_features(precision_core PUBLIC cxx_std_20)
 target_link_libraries(precision_core PUBLIC Qt6::Core)
