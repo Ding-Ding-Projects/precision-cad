@@ -1,14 +1,36 @@
+cmake_minimum_required(VERSION 3.21)
+get_filename_component(APP_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  project(precision_workspace_tests LANGUAGES CXX)
+  enable_testing()
+  find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 OpenGL Test)
+  qt_standard_project_setup()
+  add_subdirectory("${APP_SOURCE_ROOT}/src/core" core)
+  add_subdirectory("${APP_SOURCE_ROOT}/src/preferences" preferences)
+  add_subdirectory("${APP_SOURCE_ROOT}/src/app" app)
+endif()
 find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
 qt_add_executable(precision_fake_geometry_worker fake_geometry_worker.cpp)
 target_link_libraries(precision_fake_geometry_worker PRIVATE Qt6::Core)
 qt_add_executable(tst_workspace_controller
   tst_workspace_controller.cpp
-  ${CMAKE_SOURCE_DIR}/src/app/workspace_controller.cpp
-  ${CMAKE_SOURCE_DIR}/src/app/workspace_controller.h)
+  ${APP_SOURCE_ROOT}/src/app/workspace_controller.cpp
+  ${APP_SOURCE_ROOT}/src/app/workspace_controller.h)
 set_target_properties(tst_workspace_controller PROPERTIES AUTOMOC ON)
 target_link_libraries(tst_workspace_controller PRIVATE precision_core Qt6::Core Qt6::Test)
-target_include_directories(tst_workspace_controller PRIVATE ${CMAKE_SOURCE_DIR}/src/core ${CMAKE_SOURCE_DIR}/src/app)
+target_include_directories(tst_workspace_controller PRIVATE ${APP_SOURCE_ROOT}/src/core ${APP_SOURCE_ROOT}/src/app)
 target_compile_definitions(tst_workspace_controller PRIVATE FAKE_WORKER_PATH="$<TARGET_FILE:precision_fake_geometry_worker>")
 add_dependencies(tst_workspace_controller precision_fake_geometry_worker)
-add_test(NAME workspace-controller COMMAND tst_workspace_controller)
-set_tests_properties(workspace-controller PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${QT6_INSTALL_PREFIX}/bin")
+add_test(NAME workspace-controller COMMAND tst_workspace_controller -o "${CMAKE_CURRENT_BINARY_DIR}/workspace-controller.txt,txt")
+set_tests_properties(workspace-controller PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_workspace_qml tst_workspace_qml.cpp
+ "${APP_SOURCE_ROOT}/src/app/workspace_controller.cpp" "${APP_SOURCE_ROOT}/src/app/workspace_controller.h"
+ "${APP_SOURCE_ROOT}/src/app/mesh_canvas.cpp" "${APP_SOURCE_ROOT}/src/app/mesh_canvas.h" "${APP_SOURCE_ROOT}/src/app/ui_text.h")
+set_target_properties(tst_workspace_qml PROPERTIES AUTOMOC ON WIN32_EXECUTABLE OFF)
+set_target_properties(tst_workspace_controller precision_fake_geometry_worker PROPERTIES WIN32_EXECUTABLE OFF)
+target_link_libraries(tst_workspace_qml PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Test)
+target_include_directories(tst_workspace_qml PRIVATE "${APP_SOURCE_ROOT}/src/app")
+target_compile_definitions(tst_workspace_qml PRIVATE MAIN_QML_PATH="${APP_SOURCE_ROOT}/src/app/Main.qml")
+add_test(NAME workspace-qml COMMAND tst_workspace_qml -o "${CMAKE_CURRENT_BINARY_DIR}/workspace-qml.txt,txt")
+set_tests_properties(workspace-qml PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")

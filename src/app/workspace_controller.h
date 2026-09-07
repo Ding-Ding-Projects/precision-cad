@@ -4,6 +4,7 @@
 #include <QProcess>
 #include <QTimer>
 #include <QHash>
+#include <QUrl>
 #include <memory>
 #include "precision_document.h"
 
@@ -17,7 +18,15 @@ class WorkspaceController final : public QObject {
   Q_PROPERTY(QString volume READ volume NOTIFY measurementsChanged)
   Q_PROPERTY(QString bounds READ bounds NOTIFY measurementsChanged)
   Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
+  Q_PROPERTY(bool busy READ busy NOTIFY operationStateChanged)
+  Q_PROPERTY(QString documentPath READ documentPath NOTIFY documentChanged)
+  Q_PROPERTY(QString selectedBody READ selectedBody NOTIFY meshChanged)
 public:
+  bool busy() const { return bool(m_candidate); }
+  QString documentPath() const { return m_path; }
+  QString selectedBody() const { return m_selectedBody; }
+  Q_INVOKABLE void selectBody(const QString &id);
+  Q_INVOKABLE QString localPath(const QUrl &url) const { return url.isLocalFile() ? url.toLocalFile() : QString(); }
   explicit WorkspaceController(QObject *parent = nullptr);
   ~WorkspaceController() override;
   QVariantList features() const; QVariantList meshVertices() const { return m_meshVertices; } QVariantList meshIndices() const { return m_meshIndices; }
@@ -41,8 +50,14 @@ private:
   precision::core::Document m_document;
   std::unique_ptr<precision::core::Document> m_candidate;
   QVector<precision::core::Feature> m_pending; int m_index = 0; Reply m_results;
-  QProcess m_worker; QTimer m_timeout; quint64 m_generation = 0, m_loadedRevision = 0; QString m_path;
+  std::unique_ptr<QProcess> m_worker; QTimer m_timeout; quint64 m_generation = 0, m_loadedRevision = 0; QString m_path;
   QVariantList m_meshVertices, m_meshIndices; QString m_state = QStringLiteral("Ready"), m_error, m_volume = QStringLiteral("Unavailable"), m_bounds = QStringLiteral("Unavailable"); bool m_dirty = false;
-  QByteArray m_activeRequest;
+  QByteArray m_activeRequest, m_output, m_errors;
+  QString m_operationId, m_baseId, m_candidatePath, m_selectedBody;
+  quint64 m_baseRevision = 0;
+  bool m_opening = false;
+  Reply m_committedResults;
+  void stopWorker(); void drainWorker(bool errors);
+  bool validResult(const QJsonObject &result) const;
   void *m_job = nullptr;
 };

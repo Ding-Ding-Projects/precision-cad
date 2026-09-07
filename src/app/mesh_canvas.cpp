@@ -31,12 +31,12 @@ QPointF MeshCanvas::project(const QVector3D &point) const {
   return {width() / 2 + m_panX + v.x() * scale, height() / 2 + m_panY - v.y() * scale};
 }
 void MeshCanvas::paint(QPainter *painter) {
-  painter->fillRect(boundingRect(), QColor("#10131a"));
-  if (m_vertices.isEmpty() || m_indices.size() < 3) { painter->setPen(QColor("#c6c9d3")); painter->drawText(boundingRect(), Qt::AlignCenter, tr("No regenerated mesh")); return; }
+  painter->fillRect(boundingRect(), m_background);
+  if (m_vertices.isEmpty() || m_indices.size() < 3) { painter->setPen(m_foreground); painter->drawText(boundingRect(), Qt::AlignCenter, m_emptyText); return; }
   painter->setRenderHint(QPainter::Antialiasing);
   QVector<QPair<qreal, QPolygonF>> faces;
   QMatrix4x4 rotation; rotation.rotate(m_yaw, 0, 1, 0); rotation.rotate(m_pitch, 1, 0, 0);
   for (int i = 0; i + 2 < m_indices.size(); i += 3) { int a=m_indices[i], b=m_indices[i+1], c=m_indices[i+2]; if (a<0||b<0||c<0||a>=m_vertices.size()||b>=m_vertices.size()||c>=m_vertices.size()) continue; const QVector3D av=rotation*(m_vertices[a]-m_center), bv=rotation*(m_vertices[b]-m_center), cv=rotation*(m_vertices[c]-m_center); QPolygonF poly; poly << project(m_vertices[a]) << project(m_vertices[b]) << project(m_vertices[c]); faces.append({(av.z()+bv.z()+cv.z())/3, poly}); }
   std::sort(faces.begin(), faces.end(), [](const auto &a, const auto &b){ return a.first < b.first; });
-  painter->setPen(QPen(QColor("#99cbff"), 0)); painter->setBrush(QColor("#2b6cb0")); for (const auto &face : faces) painter->drawPolygon(face.second);
+  painter->setPen(QPen(m_foreground, 0)); painter->setBrush(m_body); for (const auto &face : faces) painter->drawPolygon(face.second);
 }

@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QUuid>
 #include <algorithm>
+#include <cmath>
+#include <QDir>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -16,44 +18,43 @@ namespace { constexpr int kMaxWorkerReply = 8 * 1024 * 1024; constexpr int kWork
 WorkspaceController::WorkspaceController(QObject *parent)
   : QObject(parent), m_document(DocumentRecord{kDocumentSchemaVersion, QUuid::createUuid().toString(QUuid::WithoutBraces), 0, QStringLiteral("mm"), {}}) {
   m_timeout.setSingleShot(true);
-  connect(&m_timeout, &QTimer::timeout, this, [this] { cancel(); fail(tr("Geometry worker timed out.")); });
-  connect(&m_worker, &QProcess::started, this, [this] {
-    if (!applyWorkerLimits()) { m_worker.kill(); fail(tr("Geometry worker resource boundary could not be applied.")); return; }
-    m_worker.write(m_activeRequest); m_worker.closeWriteChannel(); m_timeout.start(workerTimeoutMs());
-  });
-  connect(&m_worker, &QProcess::readyReadStandardOutput, this, [this] {
-    if (m_worker.bytesAvailable() > kMaxWorkerReply) { cancel(); fail(tr("Geometry worker reply exceeded the configured limit.")); }
-  });
-  connect(&m_worker, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, [this](int exitCode, QProcess::ExitStatus status) {
-    m_timeout.stop(); releaseWorkerLimits(); if (!m_candidate) return;
-    const QByteArray output = m_worker.readAllStandardOutput(); const QByteArray errors = m_worker.readAllStandardError();
-    if (output.size() > kMaxWorkerReply) { fail(tr("Geometry worker reply exceeded the configured limit.")); return; }
-    if (status != QProcess::NormalExit || exitCode != 0) { fail(tr("Geometry worker stopped: %1").arg(QString::fromUtf8(errors.left(512)))); return; }
-    QJsonParseError jsonError; const QJsonDocument json = QJsonDocument::fromJson(output, &jsonError);
-    if (jsonError.error != QJsonParseError::NoError || !json.isObject()) { fail(tr("Geometry worker returned invalid JSON.")); return; }
-    const QJsonObject reply = json.object(); const auto &record = m_candidate->record();
-    if (!reply.value("ok").toBool() || reply.value("documentId").toString() != record.documentId || reply.value("revision").toVariant().toULongLong() != record.revision) { fail(reply.value("error").toObject().value("message").toString(tr("Geometry request failed."))); return; }
-    m_results.insert(m_pending[m_index].id, reply.value("result").toObject()); ++m_index; runNext();
-  });
+  connect(&m_timeout, &QTimer::timeout, this, [this] { fail(tr("Geometry worker timed out.")); });
 }
 WorkspaceController::~WorkspaceController() { cancel(); releaseWorkerLimits(); }
 QVariantList WorkspaceController::features() const { QVariantList out; for (const Feature &f : m_document.record().features) out << QVariantMap{{"id", f.id}, {"label", f.label}, {"type", f.type}, {"suppressed", f.suppressed}}; return out; }
-void WorkspaceController::addBox(double dx, double dy, double dz) { Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), "box", tr("Box"), {}, QJsonObject{{"dx", dx},{"dy",dy},{"dz",dz}}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::addCylinder(double radius, double height) { Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), "cylinder", tr("Cylinder"), {}, QJsonObject{{"radius", radius},{"height",height}}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::booleanOperation(const QString &operation, const QString &left, const QString &right) { if (left.isEmpty() || right.isEmpty() || left == right) { fail(tr("Choose two different bodies.")); return; } Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), operation, operation.left(1).toUpper()+operation.mid(1), {left,right}, {}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::updateDimensions(const QString &id, double first, double second, double third) { Document candidate=m_document; for(Feature f : m_document.record().features) if(f.id==id) { if(f.type=="box") f.parameters={{"dx",first},{"dy",second},{"dz",third}}; else if(f.type=="cylinder") f.parameters={{"radius",first},{"height",second}}; else { fail(tr("This feature has no editable dimensions in the current workspace.")); return; } const Result r=candidate.updateFeature(f,m_document.record().revision); if(!r.ok) fail(r.error); else applyTransaction(std::move(candidate)); return; } fail(tr("Selected feature no longer exists.")); }
-void WorkspaceController::suppressFeature(const QString &id, bool value) { Document candidate=m_document; const Result result=candidate.suppressFeature(id,value,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::undo() { Document candidate=m_document; const Result result=candidate.undo(m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::redo() { Document candidate=m_document; const Result result=candidate.redo(m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
-void WorkspaceController::applyTransaction(Document candidate) { if (m_candidate) { fail(tr("A geometry operation is already running.")); return; } regenerate(std::move(candidate)); }
-void WorkspaceController::regenerate(Document candidate) { m_candidate=std::make_unique<Document>(std::move(candidate)); m_pending.clear(); m_results.clear(); m_index=0; for (const Feature &f:m_candidate->record().features) if (!f.suppressed) m_pending.append(f); m_state=tr("Regenerating %1 feature(s)").arg(m_pending.size()); m_error.clear(); emit operationStateChanged(); if (m_pending.isEmpty()) { commitCandidate(); return; } runNext(); }
+void WorkspaceController::addBox(double dx, double dy, double dz) { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), "box", tr("Box"), {}, QJsonObject{{"dx", dx},{"dy",dy},{"dz",dz}}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::addCylinder(double radius, double height) { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), "cylinder", tr("Cylinder"), {}, QJsonObject{{"radius", radius},{"height",height}}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::booleanOperation(const QString &operation, const QString &left, const QString &right) { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } if (left.isEmpty() || right.isEmpty() || left == right) { fail(tr("Choose two different bodies.")); return; } Feature f{QUuid::createUuid().toString(QUuid::WithoutBraces), operation, operation.left(1).toUpper()+operation.mid(1), {left,right}, {}, false}; Document candidate=m_document; const Result result=candidate.addFeature(f,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::updateDimensions(const QString &id, double first, double second, double third) { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Document candidate=m_document; for(Feature f : m_document.record().features) if(f.id==id) { if(f.type=="box") f.parameters={{"dx",first},{"dy",second},{"dz",third}}; else if(f.type=="cylinder") f.parameters={{"radius",first},{"height",second}}; else { fail(tr("This feature has no editable dimensions in the current workspace.")); return; } const Result r=candidate.updateFeature(f,m_document.record().revision); if(!r.ok) fail(r.error); else applyTransaction(std::move(candidate)); return; } fail(tr("Selected feature no longer exists.")); }
+void WorkspaceController::suppressFeature(const QString &id, bool value) { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Document candidate=m_document; const Result result=candidate.suppressFeature(id,value,m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::undo() { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Document candidate=m_document; const Result result=candidate.undo(m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::redo() { if(m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } Document candidate=m_document; const Result result=candidate.redo(m_document.record().revision); if (!result.ok) fail(result.error); else applyTransaction(std::move(candidate)); }
+void WorkspaceController::applyTransaction(Document candidate) { if (m_candidate) { m_error=tr("A geometry operation is already running."); emit operationStateChanged(); return; } regenerate(std::move(candidate)); }
+void WorkspaceController::regenerate(Document candidate) { ++m_generation; m_baseId=m_document.record().documentId; m_baseRevision=m_document.record().revision; m_candidate=std::make_unique<Document>(std::move(candidate)); m_pending.clear(); m_results.clear(); m_index=0; for (const Feature &f:m_candidate->record().features) if (!f.suppressed) m_pending.append(f); m_state=tr("Regenerating %1 feature(s)").arg(m_pending.size()); m_error.clear(); emit operationStateChanged(); if (m_pending.isEmpty()) { commitCandidate(); return; } runNext(); }
 QJsonObject WorkspaceController::requestFor(const Feature &f) const { QJsonObject params=f.parameters; if (f.type=="union"||f.type=="cut"||f.type=="intersection") { params.insert("leftBrep",m_results.value(f.inputRefs.value(0)).value("brep")); params.insert("rightBrep",m_results.value(f.inputRefs.value(1)).value("brep")); } else if ((f.type=="translate"||f.type=="rotate"||f.type=="fillet") && !f.inputRefs.isEmpty()) params.insert("brep",m_results.value(f.inputRefs.first()).value("brep")); return {{"protocolVersion",1},{"operationId",QUuid::createUuid().toString(QUuid::WithoutBraces)},{"documentId",m_candidate->record().documentId},{"revision",static_cast<qint64>(m_candidate->record().revision)},{"operation",f.type},{"parameters",params}}; }
-void WorkspaceController::runNext() { if (!m_candidate) return; if (m_index>=m_pending.size()) { commitCandidate(); return; } const QJsonObject request=requestFor(m_pending[m_index]); const QJsonObject parameters=request.value("parameters").toObject(); if ((parameters.contains("leftBrep") && parameters.value("leftBrep").toString().isEmpty()) || (parameters.contains("rightBrep") && parameters.value("rightBrep").toString().isEmpty())) { fail(tr("A required feature result is unavailable or ambiguous.")); return; } QString worker=qEnvironmentVariable("PRECISION_GEOMETRY_WORKER"); if(worker.isEmpty()) worker=QCoreApplication::applicationDirPath()+"/precision_geometry_worker.exe"; QProcessEnvironment environment; const auto inherited=QProcessEnvironment::systemEnvironment(); for(const QString &key : {QStringLiteral("PATH"),QStringLiteral("SystemRoot"),QStringLiteral("TEMP"),QStringLiteral("TMP"),QStringLiteral("QT_PLUGIN_PATH"),QStringLiteral("QT_QPA_PLATFORM_PLUGIN_PATH")}) if(inherited.contains(key)) environment.insert(key,inherited.value(key)); m_worker.setProcessEnvironment(environment); m_activeRequest=QJsonDocument(request).toJson(QJsonDocument::Compact); m_worker.start(worker); }
+void WorkspaceController::runNext() { if (!m_candidate) return; if (m_index>=m_pending.size()) { commitCandidate(); return; } const QJsonObject request=requestFor(m_pending[m_index]); const QJsonObject parameters=request.value("parameters").toObject(); if ((parameters.contains("leftBrep") && parameters.value("leftBrep").toString().isEmpty()) || (parameters.contains("rightBrep") && parameters.value("rightBrep").toString().isEmpty())) { fail(tr("A required feature result is unavailable or ambiguous.")); return; } QString worker=qEnvironmentVariable("PRECISION_GEOMETRY_WORKER"); if(worker.isEmpty()) worker=QCoreApplication::applicationDirPath()+"/precision_geometry_worker.exe"; QProcessEnvironment environment; const auto inherited=QProcessEnvironment::systemEnvironment(); for(const QString &key : {QStringLiteral("PATH"),QStringLiteral("SystemRoot"),QStringLiteral("TEMP"),QStringLiteral("TMP"),QStringLiteral("QT_PLUGIN_PATH"),QStringLiteral("QT_QPA_PLATFORM_PLUGIN_PATH")}) if(inherited.contains(key)) environment.insert(key,inherited.value(key)); stopWorker(); m_output.clear(); m_errors.clear(); m_operationId=request.value("operationId").toString();
+  m_worker=std::make_unique<QProcess>(); const quint64 epoch=m_generation; QProcess *process=m_worker.get();
+  auto current=[this,epoch,process] { return m_candidate && epoch==m_generation && m_worker.get()==process; };
+  connect(process,&QProcess::started,this,[this,current] { if(!current()) return; if(!applyWorkerLimits()) { fail(tr("Geometry worker resource boundary could not be applied.")); return; } m_worker->write(m_activeRequest); m_worker->closeWriteChannel(); });
+  connect(process,&QProcess::errorOccurred,this,[this,current](QProcess::ProcessError error) { if(current() && error==QProcess::FailedToStart) fail(tr("Geometry worker could not start.")); });
+  connect(process,&QProcess::readyReadStandardOutput,this,[this,current] { if(current()) drainWorker(false); });
+  connect(process,&QProcess::readyReadStandardError,this,[this,current] { if(current()) drainWorker(true); });
+  connect(process,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this,current](int code,QProcess::ExitStatus status) {
+    if(!current()) return; drainWorker(false); if(!current()) return; drainWorker(true); if(!current()) return;
+    m_timeout.stop(); releaseWorkerLimits();
+    if(code!=0 || status!=QProcess::NormalExit) { fail(tr("Geometry worker stopped without a valid result.")); return; }
+    QJsonParseError error; const auto json=QJsonDocument::fromJson(m_output,&error); const auto reply=json.object();
+    const auto &record=m_candidate->record();
+    if(reply.size()!=6 || error.error!=QJsonParseError::NoError || !json.isObject() || reply.value("protocolVersion")!=QJsonValue(1) || reply.value("operationId")!=QJsonValue(m_operationId) || reply.value("documentId")!=QJsonValue(record.documentId) || reply.value("revision")!=QJsonValue(static_cast<qint64>(record.revision)) || reply.value("ok")!=QJsonValue(true) || !validResult(reply.value("result").toObject())) { fail(tr("Geometry worker returned an invalid or mismatched result.")); return; }
+    m_results.insert(m_pending[m_index].id,reply.value("result").toObject()); ++m_index;
+    QTimer::singleShot(0,this,[this,epoch=m_generation] { if(m_candidate && epoch==m_generation) runNext(); });
+  });
+  m_worker->setProcessEnvironment(environment); m_activeRequest=QJsonDocument(request).toJson(QJsonDocument::Compact); m_timeout.start(workerTimeoutMs()); m_worker->start(worker); }
 bool WorkspaceController::applyWorkerLimits() {
 #ifdef Q_OS_WIN
   releaseWorkerLimits(); HANDLE job=CreateJobObjectW(nullptr,nullptr); if(!job) return false;
-  JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{}; info.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE|JOB_OBJECT_LIMIT_PROCESS_MEMORY|JOB_OBJECT_LIMIT_ACTIVE_PROCESS; info.ProcessMemoryLimit=512ull*1024ull*1024ull; info.BasicLimitInformation.ActiveProcessLimit=1;
-  if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,&info,sizeof(info))){CloseHandle(job);return false;} HANDLE process=OpenProcess(PROCESS_SET_QUOTA|PROCESS_TERMINATE,FALSE,static_cast<DWORD>(m_worker.processId())); if(!process){CloseHandle(job);return false;} const BOOL assigned=AssignProcessToJobObject(job,process); CloseHandle(process); if(!assigned){CloseHandle(job);return false;} m_job=job; return true;
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION info{}; info.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE|JOB_OBJECT_LIMIT_PROCESS_MEMORY|JOB_OBJECT_LIMIT_JOB_MEMORY|JOB_OBJECT_LIMIT_ACTIVE_PROCESS; info.ProcessMemoryLimit=512ull*1024ull*1024ull; info.JobMemoryLimit=info.ProcessMemoryLimit; info.BasicLimitInformation.ActiveProcessLimit=1;
+  if(!SetInformationJobObject(job,JobObjectExtendedLimitInformation,&info,sizeof(info))){CloseHandle(job);return false;} HANDLE process=OpenProcess(PROCESS_SET_QUOTA|PROCESS_TERMINATE,FALSE,static_cast<DWORD>(m_worker->processId())); if(!process){CloseHandle(job);return false;} const BOOL assigned=AssignProcessToJobObject(job,process); CloseHandle(process); if(!assigned){CloseHandle(job);return false;} m_job=job; return true;
 #else
   return false;
 #endif
@@ -64,10 +65,66 @@ void WorkspaceController::releaseWorkerLimits() {
 #endif
   m_job=nullptr;
 }
-void WorkspaceController::commitCandidate() { const auto &record=m_candidate->record(); if(!m_pending.isEmpty()) { const QJsonObject result=m_results.value(m_pending.last().id); const QJsonObject mesh=result.value("mesh").toObject(); m_meshVertices=mesh.value("vertices").toArray().toVariantList(); m_meshIndices=mesh.value("indices").toArray().toVariantList(); m_volume=QString::number(result.value("volume").toDouble(),'g',12)+tr(" mm³"); const QJsonArray b=result.value("bounds").toArray(); if(b.size()==6) m_bounds=QStringLiteral("[%1, %2, %3] to [%4, %5, %6] mm").arg(b[0].toDouble()).arg(b[1].toDouble()).arg(b[2].toDouble()).arg(b[3].toDouble()).arg(b[4].toDouble()).arg(b[5].toDouble()); }
-  m_document=std::move(*m_candidate); m_candidate.reset(); m_state=tr("Ready"); m_dirty=true; emit documentChanged(); emit meshChanged(); emit measurementsChanged(); emit operationStateChanged(); emit dirtyChanged(); }
-void WorkspaceController::fail(const QString &message) { m_candidate.reset(); m_pending.clear(); m_results.clear(); m_state=tr("Failed"); m_error=message; emit operationStateChanged(); }
-void WorkspaceController::cancel() { if(m_worker.state()!=QProcess::NotRunning) { m_worker.kill(); m_worker.waitForFinished(1000); } releaseWorkerLimits(); m_timeout.stop(); if(m_candidate) { m_candidate.reset(); m_state=tr("Cancelled"); emit operationStateChanged(); } }
-void WorkspaceController::save(const QString &path) { if(path.isEmpty()) return; const Result r=DocumentStorage::save(path,m_document.record(),m_path.isEmpty()?std::nullopt:std::optional<quint64>(m_loadedRevision)); if(!r.ok){ fail(r.error); emit saveFinished(false,r.error); return; } m_path=path; m_loadedRevision=m_document.record().revision; m_dirty=false; emit dirtyChanged(); emit saveFinished(true,tr("Saved")); }
-void WorkspaceController::open(const QString &path) { if(path.isEmpty()||m_candidate) return; DocumentRecord record; const Result r=DocumentStorage::recover(path,&record); if(!r.ok){ fail(r.error); return; } try { m_document=Document(record); } catch(const std::exception &e) { fail(QString::fromUtf8(e.what())); return; } m_path=path; m_loadedRevision=record.revision; m_dirty=false; m_meshVertices.clear();m_meshIndices.clear();m_volume=tr("Unavailable");m_bounds=tr("Unavailable");emit documentChanged();emit meshChanged();emit measurementsChanged();emit dirtyChanged(); regenerate(m_document); }
-void WorkspaceController::newDocument() { if(m_candidate) return; m_document=Document(DocumentRecord{kDocumentSchemaVersion,QUuid::createUuid().toString(QUuid::WithoutBraces),0,QStringLiteral("mm"),{}}); m_path.clear();m_loadedRevision=0;m_dirty=false;m_meshVertices.clear();m_meshIndices.clear();m_volume=tr("Unavailable");m_bounds=tr("Unavailable");emit documentChanged();emit meshChanged();emit measurementsChanged();emit dirtyChanged(); }
+bool WorkspaceController::validResult(const QJsonObject &result) const {
+  if(result.size()!=5) return false;
+  if(result.value("valid")!=QJsonValue(true) || !result.value("brep").isString() || result.value("brep").toString().trimmed().isEmpty()) return false;
+  auto finite=[](QJsonValue value) { return value.isDouble() && std::isfinite(value.toDouble()); };
+  if(!finite(result.value("volume")) || result.value("volume").toDouble()<0) return false;
+  const auto bounds=result.value("bounds").toArray(); if(bounds.size()!=6) return false;
+  for(auto value:bounds) if(!finite(value)) return false;
+  for(int i=0;i<3;++i) if(bounds[i].toDouble()>bounds[i+3].toDouble()) return false;
+  const auto mesh=result.value("mesh").toObject(); const auto vertices=mesh.value("vertices").toArray(), indices=mesh.value("indices").toArray(), normals=mesh.value("normals").toArray();
+  if(mesh.size()!=6) return false;
+  if(vertices.isEmpty() || vertices.size()%3 || vertices.size()>180000 || indices.isEmpty() || indices.size()%3 || indices.size()>300000 || normals.size()!=vertices.size()) return false;
+  for(auto value:vertices) if(!finite(value) || std::abs(value.toDouble())>1.0e12) return false;
+  for(auto value:normals) if(!finite(value)) return false;
+  for(auto value:indices) if(!finite(value) || value.toDouble()<0 || std::floor(value.toDouble())!=value.toDouble() || value.toDouble()>=vertices.size()/3) return false;
+  for(const QString &key:{QStringLiteral("absoluteDeflection"),QStringLiteral("targetRelativeDeflection"),QStringLiteral("effectiveRelativeDeflection")}) if(!finite(mesh.value(key)) || mesh.value(key).toDouble()<=0) return false;
+  return true;
+}
+void WorkspaceController::drainWorker(bool errors) {
+  if(!m_worker) return;
+  m_worker->setReadChannel(errors?QProcess::StandardError:QProcess::StandardOutput);
+  QByteArray &buffer=errors?m_errors:m_output;
+  while(m_worker->bytesAvailable()>0) {
+    const QByteArray chunk=m_worker->read(std::min<qint64>(65536,kMaxWorkerReply-buffer.size()+1)); buffer.append(chunk);
+    if(buffer.size()>kMaxWorkerReply) { fail(tr("Geometry worker output exceeded the configured limit.")); return; }
+  }
+}
+void WorkspaceController::stopWorker() {
+  m_timeout.stop(); if(!m_worker) { releaseWorkerLimits(); return; }
+  QProcess *old=m_worker.release(); old->disconnect(this); if(old->state()!=QProcess::NotRunning) { old->kill(); old->waitForFinished(1000); }
+  releaseWorkerLimits(); old->deleteLater();
+}
+void WorkspaceController::selectBody(const QString &id) {
+  m_selectedBody=m_committedResults.contains(id)?id:QString(); const auto result=m_committedResults.value(m_selectedBody); const auto mesh=result.value("mesh").toObject();
+  m_meshVertices=mesh.value("vertices").toArray().toVariantList(); m_meshIndices=mesh.value("indices").toArray().toVariantList();
+  m_volume=result.isEmpty()?tr("Unavailable"):QString::number(result.value("volume").toDouble(),'g',12)+tr(" mm\u00b3");
+  const auto b=result.value("bounds").toArray(); m_bounds=b.size()!=6?tr("Unavailable"):QStringLiteral("[%1, %2, %3] to [%4, %5, %6] mm").arg(b[0].toDouble()).arg(b[1].toDouble()).arg(b[2].toDouble()).arg(b[3].toDouble()).arg(b[4].toDouble()).arg(b[5].toDouble()); emit meshChanged(); emit measurementsChanged();
+}
+void WorkspaceController::commitCandidate() {
+  if(!m_candidate || m_document.record().documentId!=m_baseId || m_document.record().revision!=m_baseRevision) { fail(tr("Document changed while geometry was running.")); return; }
+  stopWorker(); m_document=std::move(*m_candidate); m_candidate.reset(); m_committedResults=m_results;
+  if(m_opening) { m_path=m_candidatePath; m_loadedRevision=m_document.record().revision; }
+  m_dirty=!m_opening; m_opening=false; m_candidatePath.clear(); m_state=tr("Ready"); m_error.clear();
+  selectBody(m_committedResults.contains(m_selectedBody)?m_selectedBody:(m_pending.isEmpty()?QString():m_pending.last().id));
+  emit documentChanged(); emit operationStateChanged(); emit dirtyChanged();
+}
+void WorkspaceController::fail(const QString &message) {
+  if(m_candidate) { ++m_generation; m_candidate.reset(); stopWorker(); }
+  m_opening=false; m_candidatePath.clear(); m_pending.clear(); m_results.clear(); m_state=tr("Failed"); m_error=message; emit operationStateChanged();
+}
+void WorkspaceController::cancel() { if(!m_candidate) return; ++m_generation; m_candidate.reset(); stopWorker(); m_opening=false; m_candidatePath.clear(); m_pending.clear(); m_results.clear(); m_state=tr("Cancelled"); m_error.clear(); emit operationStateChanged(); }
+void WorkspaceController::save(const QString &path) {
+  if(path.isEmpty()) return; if(m_candidate) { emit saveFinished(false,tr("Wait for geometry before saving.")); return; }
+  const QString target=QDir::cleanPath(QFileInfo(path).absoluteFilePath()); const bool same=!m_path.isEmpty() && target.compare(QDir::cleanPath(QFileInfo(m_path).absoluteFilePath()),Qt::CaseInsensitive)==0;
+  const Result r=DocumentStorage::save(target,m_document.record(),same?std::optional<quint64>(m_loadedRevision):std::nullopt);
+  if(!r.ok) { m_error=r.error; emit operationStateChanged(); emit saveFinished(false,r.error); return; }
+  m_path=target; m_loadedRevision=m_document.record().revision; m_dirty=false; emit documentChanged(); emit dirtyChanged(); emit saveFinished(true,tr("Saved"));
+}
+void WorkspaceController::open(const QString &path) {
+  if(path.isEmpty() || m_candidate) return; DocumentRecord record; const Result r=DocumentStorage::recover(path,&record);
+  if(!r.ok) { fail(r.error); return; } if(record.units!="mm") { fail(tr("Only millimetre documents are supported. Convert units before opening.")); return; }
+  try { Document candidate(record); m_candidatePath=QFileInfo(path).absoluteFilePath(); m_opening=true; regenerate(std::move(candidate)); } catch(const std::exception &e) { fail(QString::fromUtf8(e.what())); }
+}
+void WorkspaceController::newDocument() { if(m_candidate) return; ++m_generation; m_document=Document(DocumentRecord{kDocumentSchemaVersion,QUuid::createUuid().toString(QUuid::WithoutBraces),0,QStringLiteral("mm"),{}}); m_path.clear();m_loadedRevision=0;m_dirty=false;m_committedResults.clear();selectBody({});m_state=tr("Ready");m_error.clear();emit documentChanged();emit dirtyChanged();emit operationStateChanged(); }
