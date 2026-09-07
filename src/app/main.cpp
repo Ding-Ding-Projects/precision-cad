@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QIcon>
 #include <QStandardPaths>
+#include <memory>
 #include "workspace_controller.h"
 #include "ui_text.h"
 #include "mesh_canvas.h"
@@ -19,10 +20,16 @@
 int main(int argc, char *argv[]) {
   QGuiApplication app(argc, argv); app.setApplicationName(QStringLiteral("Precision CAD")); app.setOrganizationName(QStringLiteral("Precision CAD")); app.setApplicationVersion(QStringLiteral(PRECISION_CAD_VERSION)); app.setWindowIcon(QIcon(QStringLiteral(":/precision-cad/precision-cad.ico")));
   QCommandLineParser parser; parser.addOption({"profile-directory", "Owned profile directory for isolated runs.", "path"}); parser.addOption({"geometry-worker", "Absolute geometry worker executable for developer or test runs.", "path"}); parser.process(app);
-  const QString profile=parser.value("profile-directory"); if(!profile.isEmpty()) { QDir().mkpath(profile); qputenv("PRECISION_CAD_PROFILE_DIRECTORY", profile.toUtf8()); }
+  const QString profile=parser.value("profile-directory");
+  const bool auditRequested = qEnvironmentVariable("PRECISION_LAYOUT_AUDIT") == QStringLiteral("1");
+  if (auditRequested && !precision::diagnostics::hasValidatedAuditProfile(profile)) return 2;
+  std::unique_ptr<precision::diagnostics::NativeDiagnosticsCollector> nativeDiagnostics(
+      precision::diagnostics::NativeDiagnosticsCollector::startIfRequested(profile, QStringLiteral(PRECISION_CAD_SOURCE_COMMIT)));
+  if (auditRequested && !nativeDiagnostics) return 2;
+  if(!profile.isEmpty()) { if (!QDir().mkpath(profile)) return 2; qputenv("PRECISION_CAD_PROFILE_DIRECTORY", profile.toUtf8()); }
+  const int result = [&]() -> int {
   if(parser.isSet("geometry-worker")) { const QFileInfo worker(parser.value("geometry-worker")); if(!worker.isAbsolute() || !worker.isExecutable()) return 2; qputenv("PRECISION_GEOMETRY_WORKER", worker.absoluteFilePath().toUtf8()); }
   qmlRegisterType<MeshCanvas>("PrecisionCad", 1, 0, "MeshCanvas"); WorkspaceController workspace; const QString preferencesPath=profile.isEmpty()?QString():profile+"/preferences.json"; precision::preferences::PreferencesStore preferences(preferencesPath, &app); precision::preferences::PersonalVocabularyStore vocabulary(profile.isEmpty()?QString():profile+"/vocabulary.json", &app);
-  auto *nativeDiagnostics = precision::diagnostics::NativeDiagnosticsCollector::startIfRequested(profile, QStringLiteral(PRECISION_CAD_SOURCE_COMMIT), &app);
   UiText uiText(&preferences,&vocabulary,&app); QQmlApplicationEngine engine; if (nativeDiagnostics) nativeDiagnostics->watch(&engine); engine.rootContext()->setContextProperty("uiText", &uiText); engine.rootContext()->setContextProperty("workspace", &workspace); engine.rootContext()->setContextProperty("preferences", &preferences); engine.rootContext()->setContextProperty("vocabulary", &vocabulary); engine.rootContext()->setContextProperty("buildVersion", QStringLiteral(PRECISION_CAD_VERSION)); engine.rootContext()->setContextProperty("buildTime", QStringLiteral(PRECISION_CAD_BUILD_TIME));
   const QDateTime recordedBuild = QDateTime::fromString(QStringLiteral(PRECISION_CAD_BUILD_TIME), Qt::ISODate);
   engine.rootContext()->setContextProperty("buildTime", recordedBuild.isValid() ? recordedBuild.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss t")) : QStringLiteral("Unavailable"));
@@ -30,10 +37,14 @@ int main(int argc, char *argv[]) {
   if (!profile.isEmpty() && !QDir().mkpath(documentFolder)) return 2;
   engine.rootContext()->setContextProperty("initialDocumentFolder", QUrl::fromLocalFile(documentFolder));
   engine.loadFromModule("PrecisionCad", "Main"); if(engine.rootObjects().isEmpty()) return 1;
-  if(qEnvironmentVariableIsSet("PRECISION_LAYOUT_AUDIT")) {
+  if(auditRequested) {
     if(profile.isEmpty())return 2;
     auto *window=qobject_cast<QQuickWindow*>(engine.rootObjects().first());if(!window)return 2;
     startLayoutAudit(window,QDir(profile).filePath(QStringLiteral("layout-audit.json")));
   }
   return app.exec();
+  }();
+  // Engine, workspace, and preference destruction precede the final counter cut.
+  if (nativeDiagnostics && !nativeDiagnostics->finalize()) return 2;
+  return result;
 }

@@ -17,14 +17,19 @@ public:
 
   void watch(QQmlEngine *engine);
   bool isValid() const;
+  // Owner-thread only, after the audited engines/workers stop. Destruction also
+  // finalizes. Abnormal process termination never produces a sealed run.
+  bool finalize();
+  QString receiptPath() const;
+  QString runId() const;
+#ifdef PRECISION_DIAGNOSTICS_TESTING
+  void seedWarningCountForTest(quint64 count);
+#endif
 
 private:
-  NativeDiagnosticsCollector(QString outputPath, QString sourceCommit, QObject *parent);
-  bool writeSnapshot();
-  void recordQtMessage(QtMsgType type);
-  void recordQmlWarnings(qsizetype count);
+  NativeDiagnosticsCollector(QString runDirectory, QString sourceCommit, QString runId, QObject *parent);
+  bool writeSnapshot(bool final);
   void heartbeat();
-  void scheduleSnapshot();
   static void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message);
 
   struct State;
