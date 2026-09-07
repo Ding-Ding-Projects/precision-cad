@@ -25,7 +25,7 @@
     "archiveUrl": "https://www.nuget.org/api/v2/package/Squirrel.Windows/1.9.1",
     "sha256": "a79f77c5927caacf24890222381b8df094a621cd997328f573f53cb17f5654df",
     "archiveName": "Squirrel.Windows.1.9.1.nupkg",
-    "toolPath": "tools/Squirrel.exe"
+    "toolPath": "tools/Squirrel.com"
   },
   "nuget": {
     "version": "6.12.2",
