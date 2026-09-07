@@ -17,7 +17,9 @@
 #include <mutex>
 #include <vector>
 #ifdef Q_OS_WIN
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <sddl.h>
 #include <io.h>
@@ -33,6 +35,7 @@ constexpr quint64 kMaximumCount = 9007199254740991ULL;
 struct Counts {
   quint64 qtWarnings = 0, qtCriticals = 0, qtFatals = 0, qmlWarnings = 0;
   bool overflow = false;
+  bool reentrant = false;
   bool accepting = true;
 };
 struct Dispatcher {
@@ -209,7 +212,7 @@ void NativeDiagnosticsCollector::watch(QQmlEngine *engine) {
 }
 bool NativeDiagnosticsCollector::isValid() const {
   std::lock_guard lock(dispatcher().mutex);
-  return !state_->writeFailed && !state_->counts->overflow && state_->counts->qtFatals == 0;
+  return !state_->writeFailed && !state_->counts->overflow && !state_->counts->reentrant && state_->counts->qtFatals == 0;
 }
 QString NativeDiagnosticsCollector::receiptPath() const { return QDir(state_->runDirectory).filePath(QStringLiteral("native-diagnostics.json")); }
 QString NativeDiagnosticsCollector::runId() const { return state_->id; }
@@ -223,6 +226,16 @@ void NativeDiagnosticsCollector::seedWarningCountForTest(quint64 count) {
 
 void NativeDiagnosticsCollector::messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message) {
   auto &dispatch = dispatcher();
+  static thread_local bool entered = false;
+  if (entered) {
+    // A forwarding cycle and a genuinely nested diagnostic cannot be reliably
+    // distinguished. Never certify ambiguous counts or count one event twice.
+    std::lock_guard lock(dispatch.mutex);
+    if (dispatch.active) dispatch.active->reentrant = true;
+    return;
+  }
+  entered = true;
+  struct ResetEntry { bool &value; ~ResetEntry() { value = false; } } reset{entered};
   {
     // No QObject, Qt synchronization, allocation, queueing or file I/O.
     std::lock_guard lock(dispatch.mutex);
@@ -238,12 +251,9 @@ void NativeDiagnosticsCollector::messageHandler(QtMsgType type, const QMessageLo
   }
   // Retain forwarding after deactivation and never install above a later handler.
   // A null prior handler means audit mode keeps only counts, not default raw logs.
-  static thread_local bool forwarding = false;
   const auto previous = dispatch.previous.load(std::memory_order_acquire);
-  if (!forwarding && previous && previous != &NativeDiagnosticsCollector::messageHandler) {
-    forwarding = true;
+  if (previous && previous != &NativeDiagnosticsCollector::messageHandler) {
     previous(type, context, message);
-    forwarding = false;
   }
 }
 void NativeDiagnosticsCollector::heartbeat() { if (!state_->finalized) writeSnapshot(false); }
@@ -269,7 +279,7 @@ bool NativeDiagnosticsCollector::writeSnapshot(bool final) {
   bool overflow = counts.overflow;
   increment(state_->sequence, 1, overflow);
   if (overflow) state_->writeFailed = true;
-  const bool complete = final && !state_->writeFailed && !overflow && counts.qtFatals == 0 && validSource(state_->sourceCommit);
+  const bool complete = final && !state_->writeFailed && !overflow && !counts.reentrant && counts.qtFatals == 0 && validSource(state_->sourceCommit);
   const QJsonObject record{
       {QStringLiteral("schemaVersion"), 2}, {QStringLiteral("runId"), state_->id},
       {QStringLiteral("startedAtUtc"), state_->startedAt}, {QStringLiteral("updatedAtUtc"), utcNow()},
@@ -280,9 +290,9 @@ bool NativeDiagnosticsCollector::writeSnapshot(bool final) {
       {QStringLiteral("qmlWarnings"), static_cast<qint64>(counts.qmlWarnings)},
       {QStringLiteral("heartbeat"), static_cast<qint64>(state_->sequence)},
       {QStringLiteral("countsComplete"), complete}, {QStringLiteral("sealed"), complete},
-      {QStringLiteral("writeFailed"), state_->writeFailed}, {QStringLiteral("droppedEvents"), overflow}};
+      {QStringLiteral("writeFailed"), state_->writeFailed}, {QStringLiteral("droppedEvents"), overflow || counts.reentrant},
+      {QStringLiteral("reentrantEvents"), counts.reentrant}};
   if (!atomicWrite(receiptPath(), record)) { state_->writeFailed = true; return false; }
   return !final || complete;
 }
 } // namespace precision::diagnostics
-

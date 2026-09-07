@@ -10,7 +10,9 @@
 #include <thread>
 #include <vector>
 #ifdef Q_OS_WIN
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <winioctl.h>
 #endif
@@ -266,6 +268,16 @@ void NativeDiagnosticsTest::reentrantHandlerAndConcurrentFinalization() {
   reenterOnce = true;
   qWarning("reentrant-event");
   QCOMPARE(priorCalls.load() - before, 1);
+  QVERIFY(!collector->finalize());
+  const auto recursiveRecord = readRecord(collector->receiptPath());
+  QCOMPARE(recursiveRecord.value("qtWarnings").toInteger(), 1);
+  QVERIFY(recursiveRecord.value("reentrantEvents").toBool());
+  QVERIFY(recursiveRecord.value("droppedEvents").toBool());
+  QVERIFY(!recursiveRecord.value("sealed").toBool(true));
+  QVERIFY(!recursiveRecord.value("countsComplete").toBool(true));
+  collector.reset();
+  collector.reset(NativeDiagnosticsCollector::startIfRequested(profile.path(), source));
+  QVERIFY(collector);
   std::atomic<bool> running{true};
   std::atomic<bool> began{false};
   std::thread worker([&] {
@@ -282,7 +294,8 @@ void NativeDiagnosticsTest::reentrantHandlerAndConcurrentFinalization() {
   QVERIFY(finalized);
   const auto record = readRecord(path);
   QVERIFY(record.value("sealed").toBool());
-  QVERIFY(record.value("qtWarnings").toInteger() >= 2);
+  QVERIFY(record.value("countsComplete").toBool());
+  QVERIFY(!record.value("reentrantEvents").toBool(true));
 }
 void NativeDiagnosticsTest::rejectsJunctionProfile() {
 #ifdef Q_OS_WIN
@@ -318,4 +331,3 @@ int main(int argc, char **argv) {
   return QTest::qExec(&test, argc, argv);
 }
 #include "tst_native_diagnostics.moc"
-
