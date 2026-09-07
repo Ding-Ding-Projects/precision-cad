@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://precision-cad.example/contracts/product-acceptance-candidate.schema.json",
+  "title": "Precision CAD product acceptance candidate evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateId", "sourceCommit", "sourceTreeSha256", "releasePhase", "evaluatedAt", "components", "actualProof", "interactions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "candidateId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceTreeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "releasePhase": { "const": "final-single-full-release" },
+    "evaluatedAt": { "type": "string", "format": "date-time" },
+    "components": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
+    "actualProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "artifactType", "artifactPath", "artifactSha256", "provenancePath", "provenanceSha256"],
+      "properties": {
+        "kind": { "const": "built-artifact" },
+        "artifactType": { "enum": ["installed-runtime", "squirrel-installer"] },
+        "artifactPath": { "type": "string", "minLength": 1 },
+        "artifactSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "provenancePath": { "type": "string", "minLength": 1 },
+        "provenanceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "interactions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capabilityId", "fixtureId", "action", "expectedOutcome", "language", "theme", "viewport", "scale", "screen", "state", "interactionLogPath", "interactionLogSha256", "capturePath", "captureSha256"],
+        "properties": {
+          "capabilityId": { "type": "string", "pattern": "^[A-Z]+-[A-Z]+-[0-9]{3}$" },
+          "fixtureId": { "type": "string", "minLength": 1 },
+          "action": { "type": "string", "minLength": 1 },
+          "expectedOutcome": { "type": "string", "minLength": 1 },
+          "language": { "enum": ["en", "yue", "bilingual"] },
+          "theme": { "enum": ["light", "dark"] },
+          "viewport": { "type": "string", "minLength": 1 },
+          "scale": { "type": "string", "minLength": 1 },
+          "screen": { "type": "string", "minLength": 1 },
+          "state": { "type": "string", "minLength": 1 },
+          "interactionLogPath": { "type": "string", "minLength": 1 },
+          "interactionLogSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "capturePath": { "type": "string", "minLength": 1 },
+          "captureSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}
