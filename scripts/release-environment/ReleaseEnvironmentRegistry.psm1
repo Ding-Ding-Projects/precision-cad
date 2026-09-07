@@ -55,4 +55,9 @@ function Read-ReleaseEnvironmentRecord([string]$VmId,[string]$RegistryRoot) {
     $bytes=[IO.File]::ReadAllBytes($matches[0].FullName);$plain=[Security.Cryptography.ProtectedData]::Unprotect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
     return ([Text.Encoding]::UTF8.GetString($plain)|ConvertFrom-Json)
 }
-Export-ModuleMember -Function Get-ReleaseEnvironmentRegistryRoot,Initialize-ReleaseEnvironmentRegistry,Assert-ReleaseEnvironmentRegistryAcl,Write-ReleaseEnvironmentRecord,Read-ReleaseEnvironmentRecord
+function Assert-ReleaseEnvironmentAdapter([string]$ExpectedSwitchId,[scriptblock]$GetAdapters) {
+    $adapters=@(& $GetAdapters)
+    if ($adapters.Count -ne 1 -or $adapters[0].SwitchId -ne $ExpectedSwitchId) { throw 'The guest must have exactly one adapter bound to the registered Private switch.' }
+    return $adapters[0]
+}
+Export-ModuleMember -Function Get-ReleaseEnvironmentRegistryRoot,Initialize-ReleaseEnvironmentRegistry,Assert-ReleaseEnvironmentRegistryAcl,Write-ReleaseEnvironmentRecord,Read-ReleaseEnvironmentRecord,Assert-ReleaseEnvironmentAdapter

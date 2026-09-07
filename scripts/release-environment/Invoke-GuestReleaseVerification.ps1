@@ -16,9 +16,9 @@ if ($provisioning.version -ne 2 -or $provisioning.stage -ne 'configured' -or $pr
 $vm=Get-VM -Name $VmName -ErrorAction Stop
 if ($vm.Id.Guid -ne $provisioning.vmId -or $vm.Generation -ne 2 -or $vm.State -ne 'Running' -or $vm.Path -ne $provisioning.vmPath) { throw 'The task-owned virtual machine does not match its provisioning receipt.' }
 if (-not (Test-Path -LiteralPath $provisioning.vhdPath -PathType Leaf)) { throw 'The guest disk path recorded by the provisioning receipt is absent.' }
-$adapter=Get-VMNetworkAdapter -VMName $VmName -ErrorAction Stop | Select-Object -First 1
+$adapter=Assert-ReleaseEnvironmentAdapter $provisioning.switch.id { @(Get-VMNetworkAdapter -VMName $VmName -ErrorAction Stop) }
 $processor=Get-VMProcessor -VMName $VmName -ErrorAction Stop
-if ($adapter.SwitchId -ne $provisioning.switch.id -or $processor.Count -ne $provisioning.processorCount) { throw 'The guest network or processor configuration does not match its provisioning receipt.' }
+if ($processor.Count -ne $provisioning.processorCount) { throw 'The guest processor configuration does not match its provisioning receipt.' }
 if (-not (Test-Path -LiteralPath $GuestScriptPath -PathType Leaf)) { throw 'The guest verification script is missing.' }
 if (-not (Test-Path -LiteralPath $GuestArtifactDirectory -PathType Container)) { throw 'The guest artifact directory is missing.' }
 # The credential object is supplied by the caller from an approved protected route. This script never guesses, stores, or logs credentials.
