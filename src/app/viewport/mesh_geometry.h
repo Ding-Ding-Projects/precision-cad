@@ -33,6 +33,7 @@ public:
   double sourceScale() const { return m_scale; }
 signals:
   void meshChanged();
+  void sceneChanged();
 private:
   void rebuild();
   QVariantList m_parts;

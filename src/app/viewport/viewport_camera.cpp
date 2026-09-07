@@ -13,7 +13,7 @@ void ViewportCamera::setGeometry(MeshGeometry *value) {
   if(m_geometry)disconnect(m_geometry,nullptr,this,nullptr);
   m_geometry=value;
   const auto refresh=[this] { m_selection.clear(); emit selectionChanged(); if(m_geometry&&m_geometry->valid())setSceneBounds(m_geometry->boundsMin(),m_geometry->boundsMax()); else emit changed(); };
-  if(value)connect(value,&MeshGeometry::meshChanged,this,refresh);
+  if(value)connect(value,&MeshGeometry::sceneChanged,this,refresh);
   refresh(); emit geometryChanged();
 }
 void ViewportCamera::setProjection(Projection value) { if(m_projection==value)return; m_projection=value; emit changed(); }

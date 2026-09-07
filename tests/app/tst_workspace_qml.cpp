@@ -100,7 +100,7 @@ private slots:
   camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
   QTest::mousePress(window,Qt::RightButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(25,10));QTest::mouseRelease(window,Qt::RightButton,Qt::NoModifier,click+QPoint(25,10));QVERIFY(camera->center()!=panOrigin);
   const auto dragEye=camera->eye();QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(35,15));QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,click+QPoint(35,15));QVERIFY(camera->eye()!=dragEye);
-  for(int view=0;view<7;++view) { auto *button=root->findChild<QObject*>("standardView"+QString::number(view));QVERIFY(button);QVERIFY(QMetaObject::invokeMethod(button,"clicked"));camera->fit();QVERIFY((camera->project(camera->center())-center).manhattanLength()<.01); }
+  for(int view=0;view<7;++view) { QObject *button=nullptr;for(auto *item:root->findChild<QQuickItem*>("viewControls")->childItems())if(item->objectName()=="standardView"+QString::number(view))button=item;QVERIFY(button);QVERIFY(QMetaObject::invokeMethod(button,"clicked"));camera->fit();QVERIFY((camera->project(camera->center())-center).manhattanLength()<.01); }
   // Negative contracts: invalid input cannot leave stale GPU bytes or a pickable scene.
   auto bad=workspace.sceneParts;auto part=bad[0].toMap();part["indices"]=QVariantList{0,1,99};bad[0]=part;mesh->setParts(bad);QVERIFY(!mesh->valid());QVERIFY(mesh->vertexData().isEmpty());QVERIFY(camera->pick(center.x(),center.y()).isEmpty());
   mesh->setParts(workspace.sceneParts);QVERIFY(mesh->valid());

@@ -1,5 +1,6 @@
 #include "mesh_geometry.h"
 #include <qqml.h>
+#include <QScopeGuard>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -9,11 +10,12 @@ namespace { const int registration=qmlRegisterType<MeshGeometry>("PrecisionCad",
 MeshGeometry::MeshGeometry(QQuick3DObject *parent): QQuick3DGeometry(parent) { rebuild(); }
 void MeshGeometry::setParts(const QVariantList &v) { if(m_parts==v)return; m_parts=v; rebuild(); emit meshChanged(); }
 QString MeshGeometry::bodyForTriangle(int index) const { for(const auto &part:m_ranges) if(index>=part.first && index-part.first<part.count)return part.bodyId; return m_parts.isEmpty()?m_fallbackBodyId:QString(); }
-void MeshGeometry::setVertices(const QVariantList &v) { if(m_vertexValues==v)return; m_vertexValues=v; rebuild(); emit meshChanged(); }
-void MeshGeometry::setIndices(const QVariantList &v) { if(m_indexValues==v)return; m_indexValues=v; rebuild(); emit meshChanged(); }
-void MeshGeometry::setNormals(const QVariantList &v) { if(m_normalValues==v)return; m_normalValues=v; rebuild(); emit meshChanged(); }
+void MeshGeometry::setVertices(const QVariantList &v) { if(m_vertexValues==v)return; m_vertexValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
+void MeshGeometry::setIndices(const QVariantList &v) { if(m_indexValues==v)return; m_indexValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
+void MeshGeometry::setNormals(const QVariantList &v) { if(m_normalValues==v)return; m_normalValues=v; if(m_parts.isEmpty())rebuild(); emit meshChanged(); }
 QVariantList MeshGeometry::sourcePoint(QVector3D p) const { return {m_origin[0]+double(p.x())/m_scale,m_origin[1]+double(p.y())/m_scale,m_origin[2]+double(p.z())/m_scale}; }
 void MeshGeometry::rebuild() {
+  const auto notify=qScopeGuard([this] { emit sceneChanged(); });
   clear(); m_valid=false; m_suppliedNormals=false; m_positions.clear(); m_indices.clear();
   setBounds({},{}); update();
   QVariantList vertices=m_vertexValues,indices=m_indexValues,normalValues=m_normalValues;

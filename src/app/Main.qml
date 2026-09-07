@@ -144,7 +144,7 @@ ApplicationWindow {
         ViewportCamera { id: cameraState; objectName: "cameraController"; viewportSize: Qt.size(viewport.width, viewport.height); geometry: sceneMesh }
         Quick3D.View3D { id: nativeView; objectName: "nativeView"; anchors.fill: parent
           renderMode: Quick3D.View3D.Offscreen
-          environment: Quick3D.SceneEnvironment { objectName: "sceneEnvironment"; clearColor: Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; depthTestEnabled: true; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
+          environment: Quick3D.SceneEnvironment { objectName: "sceneEnvironment"; clearColor: root.Material.background; backgroundMode: Quick3D.SceneEnvironment.Color; depthTestEnabled: true; antialiasingMode: Quick3D.SceneEnvironment.MSAA; antialiasingQuality: Quick3D.SceneEnvironment.High }
           camera: cameraState.perspective ? perspectiveCamera : orthographicCamera
           Quick3D.PerspectiveCamera { id: perspectiveCamera; objectName: "perspectiveCamera"; position: cameraState.position; rotation: cameraState.orientation; fieldOfView: cameraState.fieldOfView; fieldOfViewOrientation: Quick3D.PerspectiveCamera.Vertical; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
           Quick3D.OrthographicCamera { id: orthographicCamera; objectName: "orthographicCamera"; position: cameraState.position; rotation: cameraState.orientation; horizontalMagnification: cameraState.magnification; verticalMagnification: cameraState.magnification; clipNear: cameraState.clipNear; clipFar: cameraState.clipFar }
@@ -152,7 +152,7 @@ ApplicationWindow {
           Quick3D.DirectionalLight { eulerRotation: Qt.vector3d(35, 135, 0); brightness: .45 }
           Quick3D.Model { id: meshModel; objectName: "meshModel"; visible: sceneMesh.valid; pickable: true
             geometry: MeshGeometry { id: sceneMesh; objectName: "sceneMesh"; vertices: viewport.vertices; indices: viewport.indices; normals: typeof workspace.meshNormals === "undefined" ? [] : workspace.meshNormals; parts: typeof workspace.meshParts === "undefined" ? [] : workspace.meshParts; fallbackBodyId: workspace.selectedBody }
-            materials: Quick3D.PrincipledMaterial { baseColor: Material.accent; roughness: .65; metalness: .15; cullMode: Quick3D.Material.NoCulling }
+            materials: Quick3D.PrincipledMaterial { baseColor: root.Material.accent; roughness: .65; metalness: .15; cullMode: Quick3D.Material.NoCulling }
           }
         }
         Label { anchors.centerIn: parent; visible: !sceneMesh.valid; textFormat: Text.PlainText; text: root.copy("No valid regenerated mesh","尚未生成有效網格"); color: Material.foreground }
