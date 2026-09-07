@@ -29,19 +29,31 @@ function Start-SignerAudit {
     $sessionId = [Guid]::NewGuid().ToString('N')
     $observer = Join-Path $PSScriptRoot 'observe-signer-processes.ps1'
     $arguments = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -LogPath "{1}" -ReadyPath "{2}" -StopPath "{3}" -SessionId "{4}"' -f $observer,$auditPath,$readyPath,$stopPath,$sessionId)
-    $process = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardError $errorPath
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = (Get-Process -Id $PID).Path
+    $startInfo.Arguments = $arguments
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw 'Signer-process observer could not start.' }
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
     while ([DateTimeOffset]::UtcNow -lt $deadline -and -not (Test-Path -LiteralPath $readyPath)) {
-        if ($process.HasExited) { $detail=if(Test-Path -LiteralPath $errorPath){Get-Content -LiteralPath $errorPath -Raw}else{'no stderr output'}; throw "Signer-process observer exited before reporting readiness: $detail" }
+        if ($process.HasExited) { $detail=$process.StandardError.ReadToEnd(); Set-Content -LiteralPath $errorPath -Value $detail -Encoding utf8; if(-not $detail){$detail='no stderr output'}; throw "Signer-process observer exited before reporting readiness: $detail" }
         Start-Sleep -Milliseconds 50
     }
     if (-not (Test-Path -LiteralPath $readyPath) -or (Get-Content -LiteralPath $readyPath -Raw) -ne $sessionId) { throw 'Signer-process observer did not complete its readiness handshake.' }
-    return [ordered]@{ process=$process; path=$auditPath; readyPath=$readyPath; stopPath=$stopPath; sessionId=$sessionId; startedAt=[DateTimeOffset]::UtcNow.ToString('o') }
+    return [ordered]@{ process=$process; path=$auditPath; readyPath=$readyPath; stopPath=$stopPath; errorPath=$errorPath; sessionId=$sessionId; startedAt=[DateTimeOffset]::UtcNow.ToString('o') }
 }
 function Stop-SignerAudit($audit) {
     Set-Content -LiteralPath $audit.stopPath -Value $audit.sessionId -Encoding ascii -NoNewline
     if (-not $audit.process.WaitForExit(10000)) { throw 'Signer-process observer did not terminate after the package command ended.' }
-    if ($audit.process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $audit.path)) { throw 'Signer-process observer did not produce a healthy audit log.' }
+    $audit.process.Refresh()
+    $stderr = $audit.process.StandardError.ReadToEnd()
+    Set-Content -LiteralPath $audit.errorPath -Value $stderr -Encoding utf8
+    $observerExitCode = $audit.process.ExitCode
+    if ($null -eq $observerExitCode -or $observerExitCode -ne 0 -or -not (Test-Path -LiteralPath $audit.path)) { throw 'Signer-process observer did not produce a healthy audit log.' }
     $records = @(Get-Content -LiteralPath $audit.path | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
     $started = @($records | Where-Object kind -eq 'started'); $ready = @($records | Where-Object kind -eq 'ready'); $heartbeats = @($records | Where-Object kind -eq 'heartbeat'); $events = @($records | Where-Object kind -eq 'process-start'); $samples = @($records | Where-Object kind -eq 'sample'); $terminal = @($records | Where-Object kind -eq 'terminal')
     if ($started.Count -ne 1 -or $ready.Count -ne 1 -or $heartbeats.Count -lt 1 -or (($events.Count + $samples.Count) -lt 1) -or $terminal.Count -ne 1 -or -not $terminal[0].healthy) { throw 'Signer-process audit coverage is incomplete.' }
