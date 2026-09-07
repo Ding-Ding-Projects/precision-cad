@@ -11,7 +11,7 @@ class LocalHistoryServiceTest final : public QObject {
     Q_OBJECT
     QString root;
     static bool run(const QStringList &args, const QString &at) { QProcess p; p.setProgram("git"); p.setArguments(QStringList{"-C", at} + args); p.start(); return p.waitForFinished(10000) && p.exitCode() == 0; }
-    static QByteArray document(int revision, QString label = "Boss") { return QJsonDocument(QJsonObject{{"schemaVersion",1},{"documentId","doc-1"},{"revision",revision},{"units","mm"},{"features",QJsonArray{QJsonObject{{"id","f1"},{"type","box"},{"label",label}}}}}).toJson(QJsonDocument::Compact); }
+    static QByteArray document(int revision, QString label = "Boss") { return QJsonDocument(QJsonObject{{"schemaVersion",1},{"documentId","doc-1"},{"revision",revision},{"units","mm"},{"features",QJsonArray{QJsonObject{{"id","f1"},{"type","box"},{"label",label},{"inputRefs",QJsonArray{}},{"parameters",QJsonObject{}},{"suppressed",false}}}}}).toJson(QJsonDocument::Compact); }
     static void write(const QString &path, const QByteArray &bytes) { QFile f(path); QVERIFY2(f.open(QIODevice::WriteOnly), qPrintable(path)); QCOMPARE(f.write(bytes), bytes.size()); }
 private slots:
     void init() { root = QDir::temp().filePath("precision-history-" + QUuid::createUuid().toString(QUuid::WithoutBraces)); QVERIFY(QDir().mkpath(root)); QVERIFY(run({"init"},root)); QVERIFY(run({"config","user.name","Fixture"},root)); QVERIFY(run({"config","user.email","fixture@example.invalid"},root)); write(root+"/model.pcad",document(1)); QVERIFY(run({"add","model.pcad"},root)); QVERIFY(run({"commit","-m","initial"},root)); }

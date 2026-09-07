@@ -13,7 +13,7 @@
 #include <QSaveFile>
 #include <QLockFile>
 #include <QUuid>
-#include <QTemporaryFile>
+#include <QTemporaryDir>
 
 namespace precision::history {
 namespace {
@@ -145,13 +145,29 @@ bool LocalHistoryService::commitSelected(const QStringList &relativePaths, const
     const ProjectStatus status = inspectStatus();
     if (!status.error.code.isEmpty()) { if (error) *error = status.error; return false; }
     if (!status.staged.isEmpty()) { setError(error, QStringLiteral("unrelated-staged-state"), QStringLiteral("Commit is refused while any staged project state exists.")); return false; }
-    QStringList args{QStringLiteral("-C"), m_root, QStringLiteral("add"), QStringLiteral("--")};
-    for (const auto &path : relativePaths) { if (!validSelectedPath(path, nullptr, error)) return false; args << path; }
-    auto add = git(args); if (add.exitCode != 0 || add.timedOut) { setError(error, QStringLiteral("stage-failed"), cleanMessage(add.error)); return false; }
-    auto diff = git({QStringLiteral("-C"), m_root, QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--quiet")});
+    QStringList selected;
+    for (const auto &path : relativePaths) { if (!validSelectedPath(path, nullptr, error)) return false; selected << path; }
+    QTemporaryDir temporaryIndexDirectory;
+    if (!temporaryIndexDirectory.isValid()) { setError(error, QStringLiteral("index-create-failed"), QStringLiteral("A private temporary index directory could not be created.")); return false; }
+    const QString indexPath = QDir(temporaryIndexDirectory.path()).filePath(QStringLiteral("index"));
+    QProcessEnvironment isolated; isolated.insert(QStringLiteral("GIT_INDEX_FILE"), indexPath);
+    const auto liveIndex = git({QStringLiteral("-C"), m_root, QStringLiteral("rev-parse"), QStringLiteral("--git-path"), QStringLiteral("index")});
+    QString liveIndexPath = QString::fromUtf8(liveIndex.output).trimmed(); if (QDir::isRelativePath(liveIndexPath)) liveIndexPath = QDir(m_root).absoluteFilePath(liveIndexPath);
+    QFile sourceIndex(liveIndexPath), isolatedIndex(indexPath);
+    if (liveIndex.exitCode != 0 || liveIndex.timedOut || liveIndexPath.isEmpty()) { setError(error, QStringLiteral("index-path-failed"), QStringLiteral("The project index path could not be resolved.")); return false; }
+    if (sourceIndex.exists()) {
+        if (!sourceIndex.open(QIODevice::ReadOnly) || !isolatedIndex.open(QIODevice::WriteOnly | QIODevice::NewOnly) || isolatedIndex.write(sourceIndex.readAll()) < 0) { setError(error, QStringLiteral("index-copy-failed"), QStringLiteral("The current project index could not be isolated.")); return false; }
+        isolatedIndex.close(); sourceIndex.close();
+    } else {
+        auto empty = git({QStringLiteral("-C"), m_root, QStringLiteral("read-tree"), QStringLiteral("--empty")}, 10000, isolated);
+        if (empty.exitCode != 0 || empty.timedOut) { setError(error, QStringLiteral("index-create-failed"), cleanMessage(empty.error)); return false; }
+    }
+    QStringList args{QStringLiteral("-C"), m_root, QStringLiteral("add"), QStringLiteral("--")}; args += selected;
+    auto add = git(args, 10000, isolated); if (add.exitCode != 0 || add.timedOut) { setError(error, QStringLiteral("stage-failed"), cleanMessage(add.error)); return false; }
+    auto diff = git({QStringLiteral("-C"), m_root, QStringLiteral("diff"), QStringLiteral("--cached"), QStringLiteral("--quiet")}, 10000, isolated);
     if (diff.exitCode == 0) return true;
     if (diff.exitCode != 1) { setError(error, QStringLiteral("commit-check-failed"), cleanMessage(diff.error)); return false; }
-    auto commit = git({QStringLiteral("-C"), m_root, QStringLiteral("-c"), QStringLiteral("user.name=") + author.name, QStringLiteral("-c"), QStringLiteral("user.email=") + author.email, QStringLiteral("commit"), QStringLiteral("-m"), message});
+    auto commit = git({QStringLiteral("-C"), m_root, QStringLiteral("-c"), QStringLiteral("user.name=") + author.name, QStringLiteral("-c"), QStringLiteral("user.email=") + author.email, QStringLiteral("commit"), QStringLiteral("-m"), message}, 10000, isolated);
     if (commit.exitCode != 0 || commit.timedOut) { setError(error, QStringLiteral("commit-failed"), cleanMessage(commit.error)); return false; }
     return true;
 }
