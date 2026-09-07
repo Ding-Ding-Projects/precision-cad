@@ -44,8 +44,12 @@ The approved upstream source is `https://github.com/solvespace/solvespace.git` a
 
 ## Verification
 
+The ordinary root CMake build includes `precision_sketch`; its three focused tests are included only when `BUILD_TESTING` is enabled. `scripts/build-native.ps1` runs the solver bootstrap before configuration. Both bootstrap and CMake consume the exact source revision from `manifests/native-dependencies.json`. An already populated, clean cache at that revision avoids a network fetch; source and submodule provenance are still checked. Bundled mimalloc uses local normal options under `CMP0077`, preserving parent cache options and policies.
+
 `tests/sketch/sketch_model_tests.cpp` invokes the real libslvs solver for every supported relation kind, line/circle/arc equal-radius signatures, all eight arc-line operand/endpoint orderings, all four arc-arc endpoint combinations, non-tangent rejection, unsupported tangency rejection, strict JSON mutations with output preservation, invalid typed references, extreme IDs, rotated/scaled datum normals, dimension editing, and rectangle-with-hole solved/under/over states. The rectangle is constrained by dimensions and horizontal/vertical relations, with one fixed corner and a fixed hole center. Failed solves are checked for no replacement geometry and no input mutation.
 
 `tests/sketch/solver_provenance_tests.ps1` uses isolated disposable Git fixtures to prove rejection and restoration of altered source, altered submodule content, missing submodules, and incorrect revision pins. It retains those fixtures below the selected build directory for inspection. No real solver cache is modified by the negative tests.
+
+`tests/sketch/cmake_options_test.cmake` configures a real parent project with conflicting allocator cache presets, checks preservation and static-only target selection, deliberately injects cache drift to prove rejection, and restores the configuration. Git long-path settings in provenance fixtures remain local to those disposable repositories and their submodules.
 
 Configure the standalone tests with CMake from `tests/sketch`, the project's MSVC toolchain, and Qt 6.8 Core/Test. Build the resulting directory, then run `ctest --test-dir <build-directory> --output-on-failure`. The standalone suite verifies this foundation only; it does not prove packaged UI or document integration.

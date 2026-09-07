@@ -8,7 +8,7 @@ $source = Join-Path $fixture 'source'
 $child = Join-Path $fixture 'child'
 $script:checks = 0
 function Invoke-Git([string]$Directory, [string[]]$GitArgs) {
-    $output = & git -C $Directory @GitArgs 2>&1
+    $output = & git -c core.longpaths=true -C $Directory @GitArgs 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Fixture Git command failed: $($GitArgs[0]): $output" }
     return $output
 }
@@ -18,6 +18,7 @@ function New-Source([string]$Path) {
     Invoke-Git $Path @('config', 'user.name', 'Claude Fable 5.1') | Out-Null
     Invoke-Git $Path @('config', 'user.email', 'noreply@anthropic.com') | Out-Null
     Invoke-Git $Path @('config', 'commit.gpgsign', 'false') | Out-Null
+    Invoke-Git $Path @('config', 'core.longpaths', 'true') | Out-Null
     Set-Content -LiteralPath (Join-Path $Path 'source.cpp') -Value 'int fixture = 1;'
     Invoke-Git $Path @('add', 'source.cpp') | Out-Null
     Invoke-Git $Path @('commit', '--quiet', '-m', "Create provenance fixture`n`n建立來源驗證樣本，假資料都要有真履歷。`n`nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>") | Out-Null
@@ -26,6 +27,7 @@ New-Source $child
 New-Source $source
 foreach ($name in @('eigen', 'mimalloc')) {
     Invoke-Git $source @('-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', $child, "extlib/$name") | Out-Null
+    Invoke-Git (Join-Path $source "extlib/$name") @('config', 'core.longpaths', 'true') | Out-Null
 }
 Invoke-Git $source @('commit', '--quiet', '-am', "Pin provenance fixture sources`n`n鎖定驗證樣本來源，避免版本玩捉迷藏。`n`nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>") | Out-Null
 $expected = (Invoke-Git $source @('rev-parse', 'HEAD')).Trim()
