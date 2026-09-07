@@ -113,22 +113,21 @@ bool PreferencesStore::persist(const Values &v) {
     if (!lock.tryLock(0)) { fail("preferences are busy in another writer"); return false; }
     QFile current(m_storagePath);
     QByteArray currentBytes;
-    if (current.exists()) { if (!current.open(QIODevice::ReadOnly) || current.size() > kMaxPreferencesBytes) { fail("preferences cannot be safely read for write"); return false; } currentBytes = current.readAll(); current.close(); }
+    if (current.exists()) { if (!current.open(QIODevice::ReadOnly)) { fail("preferences cannot be safely read for write"); return false; } currentBytes = current.read(kMaxPreferencesBytes+1); current.close(); if(currentBytes.size()>kMaxPreferencesBytes) { fail("preferences cannot be safely read for write"); return false; } }
     if (QCryptographicHash::hash(currentBytes, QCryptographicHash::Sha256) != m_revisionDigest) { fail("preferences changed by another writer; reload before retrying"); return false; }
     QJsonObject root{{"schemaVersion",kSchemaVersion},{"languageMode",v.languageMode},{"englishTone",v.englishTone},{"cantoneseTone",v.cantoneseTone},{"dialogEmojis",v.dialogEmojis},{"theme",v.theme},{"fontScale",v.fontScale},{"accentColor",v.accentColor},{"reducedMotion",v.reducedMotion},{"adhdMode",v.adhdMode},{"narrationEnabled",v.narrationEnabled},{"narrationLanguage",v.narrationLanguage},{"englishVoiceId",v.englishVoiceId},{"cantoneseVoiceId",v.cantoneseVoiceId},{"narrationRate",v.narrationRate},{"narrationPitch",v.narrationPitch}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
     QSaveFile output(m_storagePath); if (!output.open(QIODevice::WriteOnly)) { fail("preferences file cannot be opened for atomic write"); return false; }
     if (output.write(bytes) != bytes.size() || !output.commit()) { fail("preferences atomic write failed"); return false; }
     QFile committed(m_storagePath); if (!committed.open(QIODevice::ReadOnly)) { fail("preferences atomic write could not be verified"); return false; }
-    m_revisionDigest = QCryptographicHash::hash(committed.readAll(), QCryptographicHash::Sha256);
+    const auto committedBytes=committed.read(kMaxPreferencesBytes+1); if(committedBytes.size()>kMaxPreferencesBytes) { fail("preferences atomic write could not be verified"); return false; } m_revisionDigest = QCryptographicHash::hash(committedBytes, QCryptographicHash::Sha256);
     return true;
 }
 
 void PreferencesStore::load() {
     QFile input(m_storagePath); if (!input.exists()) { m_revisionDigest = QCryptographicHash::hash({}, QCryptographicHash::Sha256); return; }
     if (!input.open(QIODevice::ReadOnly)) { fail("preferences cannot be read; defaults retained"); return; }
-    if (input.size() > kMaxPreferencesBytes) { m_loadedCorrupt=true; fail("preferences are too large; defaults retained"); return; }
-    const QByteArray bytes = input.readAll(); m_revisionDigest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
+    const QByteArray bytes = input.read(kMaxPreferencesBytes+1); if (bytes.size() > kMaxPreferencesBytes) { m_loadedCorrupt=true; fail("preferences are too large; defaults retained"); return; } m_revisionDigest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
     QJsonParseError error; const QJsonDocument doc=QJsonDocument::fromJson(bytes,&error);
     const QSet<QString> allowed={"schemaVersion","languageMode","englishTone","cantoneseTone","dialogEmojis","theme","fontScale","accentColor","reducedMotion","adhdMode","narrationEnabled","narrationLanguage","englishVoiceId","cantoneseVoiceId","narrationRate","narrationPitch"};
     const QJsonObject o=doc.object();
@@ -142,8 +141,8 @@ void PreferencesStore::load() {
     *m_values=v;
 }
 bool PreferencesStore::preserveCorruptRecord() {
-    QFile input(m_storagePath); if (!input.open(QIODevice::ReadOnly) || input.size()>kMaxPreferencesBytes) { fail("corrupt preferences cannot be preserved safely"); return false; }
-    const QByteArray raw=input.readAll(); QSaveFile evidence(m_storagePath+".corrupt");
+    QFile input(m_storagePath); if (!input.open(QIODevice::ReadOnly)) { fail("corrupt preferences cannot be preserved safely"); return false; }
+    const QByteArray raw=input.read(kMaxPreferencesBytes+1); if(raw.size()>kMaxPreferencesBytes) { fail("corrupt preferences cannot be preserved safely"); return false; } QSaveFile evidence(m_storagePath+".corrupt");
     if (!evidence.open(QIODevice::WriteOnly) || evidence.write(raw)!=raw.size() || !evidence.commit()) { fail("corrupt preferences evidence could not be preserved"); return false; }
     return true;
 }
