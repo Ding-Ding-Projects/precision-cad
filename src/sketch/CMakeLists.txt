@@ -20,12 +20,19 @@ add_custom_target(precision_verify_sketch_solver
   COMMENT "Verifying immutable SolveSpace source and solver submodules"
   VERBATIM)
 
-set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
-set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
-set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 if(NOT TARGET mimalloc-static)
-  add_subdirectory("${PRECISION_SOLVESPACE_SOURCE}/extlib/mimalloc" "${CMAKE_CURRENT_BINARY_DIR}/solvespace-mimalloc" EXCLUDE_FROM_ALL)
+  block(SCOPE_FOR VARIABLES POLICIES)
+    cmake_policy(SET CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    # Local normal variables configure this bundled target without overwriting
+    # a parent project's cache choices or leaking overrides to sibling targets.
+    set(MI_OVERRIDE OFF)
+    set(MI_BUILD_SHARED OFF)
+    set(MI_BUILD_OBJECT OFF)
+    set(MI_BUILD_TESTS OFF)
+    set(MI_BUILD_STATIC ON)
+    add_subdirectory("${PRECISION_SOLVESPACE_SOURCE}/extlib/mimalloc" "${CMAKE_CURRENT_BINARY_DIR}/solvespace-mimalloc" EXCLUDE_FROM_ALL)
+  endblock()
 endif()
 
 add_library(precision_sketch STATIC

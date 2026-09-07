@@ -16,3 +16,10 @@ add_test(NAME precision_sketch_tests COMMAND "${CMAKE_COMMAND}" -E env "PATH=$<T
 
 find_program(PRECISION_PWSH pwsh REQUIRED)
 add_test(NAME precision_sketch_solver_provenance COMMAND "${PRECISION_PWSH}" -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/solver_provenance_tests.ps1" -Verifier "${CMAKE_CURRENT_LIST_DIR}/../../src/sketch/verify_solver_source.cmake" -FixtureParent "${CMAKE_CURRENT_BINARY_DIR}/provenance-fixtures")
+add_test(NAME precision_sketch_cmake_options COMMAND "${CMAKE_COMMAND}"
+  "-DFIXTURE_SOURCE=${CMAKE_CURRENT_LIST_DIR}/cmake-options"
+  "-DFIXTURE_BUILD=${CMAKE_CURRENT_BINARY_DIR}/parent-options-fixture"
+  "-DSKETCH_SOURCE=${CMAKE_CURRENT_LIST_DIR}/../../src/sketch"
+  "-DGENERATOR=${CMAKE_GENERATOR}" "-DQt6_DIR=${Qt6_DIR}"
+  "-DC_COMPILER=${CMAKE_C_COMPILER}" "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
+  -P "${CMAKE_CURRENT_LIST_DIR}/cmake_options_test.cmake")
