@@ -56,7 +56,7 @@ private slots:
     service.checkNow(); QCOMPARE(service.state(),UpdateState::Ready); QVERIFY(QFile::exists(dir.filePath("stage/PrecisionCAD-0.1.1-full.nupkg")));
     QSignalSpy approval(&service,&UpdateService::restartApprovalRequested); service.requestInstall(); QCOMPARE(service.state(),UpdateState::Installing); QCOMPARE(approval.count(),1); QVERIFY(!fake->called);
     service.approveInstall(false); QCOMPARE(service.state(),UpdateState::Ready); QVERIFY(!fake->called);
-    service.requestInstall(); service.approveInstall(true); QVERIFY(fake->called); QCOMPARE(fake->program,QDir::cleanPath(dir.filePath("Update.exe"))); QVERIFY(fake->arguments.first().startsWith(QStringLiteral("--update=https://")));
+    service.requestInstall(); service.approveInstall(true); QVERIFY(fake->called); QCOMPARE(fake->program,QDir::cleanPath(dir.filePath("Update.exe"))); QVERIFY(fake->arguments.first().startsWith(QStringLiteral("--update=file:///"))); QVERIFY(QFile::exists(dir.filePath("stage/RELEASES")));
   }
   void badSha1AndCancellationRefuseReady() {
     QTemporaryDir dir; installShape(dir); const QByteArray package("candidate-package"); auto c=config(dir); auto transport=std::make_unique<FakeTransport>(); auto *raw=transport.get();

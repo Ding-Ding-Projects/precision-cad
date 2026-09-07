@@ -98,7 +98,7 @@ void UpdateService::checkNow() {
   if (m_state == UpdateState::Checking || m_state == UpdateState::Downloading || m_state == UpdateState::Installing) return;
   if (!isInstalledSquirrelApplication()) { setState(UpdateState::Unavailable, tr("This standalone build is not installed by Squirrel.Windows.")); return; }
   if (!isApprovedUrl(m_config.feedUrl, m_config.feedUrl)) { setState(UpdateState::Error, tr("The declared update feed is not an approved HTTPS URL.")); return; }
-  ++m_generation; m_info={}; m_releaseSha1.clear(); setState(UpdateState::Checking); fetchMetadata();
+  ++m_generation; m_info={}; m_releaseSha1.clear(); m_verifiedLocalFeed={}; setState(UpdateState::Checking); fetchMetadata();
 }
 void UpdateService::cancel() { if (m_state != UpdateState::Checking && m_state != UpdateState::Downloading) return; ++m_generation; m_info={}; setState(UpdateState::Idle); emit updateChanged(); }
 void UpdateService::retry() { if (m_state == UpdateState::Error || m_state == UpdateState::Unavailable) checkNow(); }
@@ -152,7 +152,12 @@ void UpdateService::finishPackage(const TransferResult &result) {
   if(digest!=m_info.sha256 || sha1!=m_releaseSha1) { setState(UpdateState::Error,tr("The downloaded update package hash did not match metadata or Squirrel RELEASES.")); return; }
   QDir stage(m_config.stagingDirectory); if(!stage.exists() && !stage.mkpath(QStringLiteral("."))) { setState(UpdateState::Error,tr("The update staging directory could not be created.")); return; }
   if(QStorageInfo(stage.absolutePath()).bytesAvailable()<qMax(m_config.minimumFreeBytes,qint64(result.body.size())*2)) { setState(UpdateState::Error,tr("There is insufficient disk space to stage the update.")); return; }
-  QSaveFile file(stage.filePath(QFileInfo(m_info.packageUrl.path()).fileName())); if(!file.open(QIODevice::WriteOnly) || file.write(result.body)!=result.body.size() || !file.commit()) { setState(UpdateState::Error,tr("The update package could not be staged atomically.")); return; }
+  const QString packageName=QFileInfo(m_info.packageUrl.path()).fileName();
+  QSaveFile file(stage.filePath(packageName)); if(!file.open(QIODevice::WriteOnly) || file.write(result.body)!=result.body.size() || !file.commit()) { setState(UpdateState::Error,tr("The update package could not be staged atomically.")); return; }
+  QSaveFile manifest(stage.filePath(QStringLiteral("RELEASES")));
+  const QByteArray localRow=m_releaseSha1.toLatin1()+" "+packageName.toUtf8()+" "+QByteArray::number(result.body.size())+"\n";
+  if(!manifest.open(QIODevice::WriteOnly) || manifest.write(localRow)!=localRow.size() || !manifest.commit()) { setState(UpdateState::Error,tr("The verified local Squirrel feed could not be staged atomically.")); return; }
+  m_verifiedLocalFeed=QUrl::fromLocalFile(stage.absolutePath()+QDir::separator());
   setState(UpdateState::Ready);
 }
 void UpdateService::requestInstall() {
@@ -162,7 +167,8 @@ void UpdateService::requestInstall() {
 void UpdateService::approveInstall(bool approved) {
   if(m_state!=UpdateState::Installing) return;
   if(!approved) { setState(UpdateState::Ready); return; }
-  // The shell has checked unsaved work. Update.exe stages the verified Squirrel feed; this service never restarts the app.
-  QString error; if(!m_process->start(updateExePath(),{QStringLiteral("--update=%1").arg(m_config.feedUrl.toString(QUrl::FullyEncoded))},&error)) setState(UpdateState::Error,tr("Squirrel Update.exe could not start: %1").arg(error));
+  if(!m_verifiedLocalFeed.isLocalFile()) { setState(UpdateState::Error,tr("No verified local Squirrel feed is available.")); return; }
+  // The shell has checked unsaved work. The mutable HTTPS feed is never fetched again after verification.
+  QString error; if(!m_process->start(updateExePath(),{QStringLiteral("--update=%1").arg(m_verifiedLocalFeed.toString(QUrl::FullyEncoded))},&error)) setState(UpdateState::Error,tr("Squirrel Update.exe could not start: %1").arg(error));
 }
 } // namespace precision::update

@@ -84,6 +84,7 @@ private:
   UpdateInfo m_info;
   QString m_error;
   QString m_releaseSha1;
+  QUrl m_verifiedLocalFeed;
   quint64 m_generation = 0;
   std::unique_ptr<UpdateTransport> m_transport;
   std::unique_ptr<UpdateProcess> m_process;
