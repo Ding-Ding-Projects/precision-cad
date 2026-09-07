@@ -21,6 +21,8 @@ constexpr int kMaxFeatures = 10000;
 constexpr int kMaxRefsPerFeature = 256;
 constexpr int kMaxStringLength = 512;
 constexpr int kMaxJsonDepth = 16;
+// Native document envelopes add root, feature-list, feature, and parameters containers.
+constexpr int kMaxParserDepth = kMaxJsonDepth + 8;
 constexpr int kMaxJsonItems = 10000;
 constexpr qsizetype kMaxDocumentBytes = 16 * 1024 * 1024;
 
@@ -87,7 +89,7 @@ bool duplicateObjectKey(const QByteArray &json) {
     auto whitespace = [&] { while (pos < json.size() && QByteArray(" \t\r\n").contains(json[pos])) ++pos; };
     std::function<bool(int)> value;
     std::function<bool(int)> object = [&](int depth) {
-        if (depth > kMaxJsonDepth) return true;
+        if (depth > kMaxParserDepth) return true;
         if (pos >= json.size() || json[pos++] != '{') return false; whitespace(); QSet<QString> keys;
         if (pos < json.size() && json[pos] == '}') { ++pos; return false; }
         while (pos < json.size()) {
@@ -99,7 +101,7 @@ bool duplicateObjectKey(const QByteArray &json) {
         }
         return false;
     };
-    std::function<bool(int)> array = [&](int depth) { if (depth > kMaxJsonDepth) return true; if (pos >= json.size() || json[pos++] != '[') return false; whitespace(); if (pos < json.size() && json[pos] == ']') { ++pos; return false; } while (pos < json.size()) { if (value(depth + 1)) return true; whitespace(); if (pos >= json.size()) return false; if (json[pos] == ']') { ++pos; return false; } if (json[pos++] != ',') return false; } return false; };
+    std::function<bool(int)> array = [&](int depth) { if (depth > kMaxParserDepth) return true; if (pos >= json.size() || json[pos++] != '[') return false; whitespace(); if (pos < json.size() && json[pos] == ']') { ++pos; return false; } while (pos < json.size()) { if (value(depth + 1)) return true; whitespace(); if (pos >= json.size()) return false; if (json[pos] == ']') { ++pos; return false; } if (json[pos++] != ',') return false; } return false; };
     value = [&](int depth) { whitespace(); if (pos >= json.size()) return false; if (json[pos] == '{') return object(depth); if (json[pos] == '[') return array(depth); if (json[pos] == '"') { ++pos; while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; ++pos; } if (pos >= json.size()) return false; ++pos; return false; } while (pos < json.size() && !QByteArray(" \t\r\n,]}").contains(json[pos])) ++pos; return false; };
     return value(0);
 }
