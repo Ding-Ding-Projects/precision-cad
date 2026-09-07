@@ -13,9 +13,16 @@
 
 inline std::atomic<int> auditWarningCount{0};
 inline std::atomic<int> auditCriticalCount{0};
+inline std::atomic<int> auditPlacementWarnings{0};
+inline std::atomic<int> auditBindingWarnings{0};
+inline std::atomic<int> auditOtherWarnings{0};
 inline void enableLayoutAuditMessages() {
- qInstallMessageHandler([](QtMsgType type,const QMessageLogContext &,const QString &){
-  if(type==QtWarningMsg)++auditWarningCount;
+ qInstallMessageHandler([](QtMsgType type,const QMessageLogContext &,const QString &message){
+  if(type==QtWarningMsg){++auditWarningCount;
+   if(message.startsWith(QStringLiteral("QWindowsWindow::setGeometry")))++auditPlacementWarnings;
+   else if(message.contains(QStringLiteral("Binding loop"),Qt::CaseInsensitive))++auditBindingWarnings;
+   else ++auditOtherWarnings;
+  }
   if(type==QtCriticalMsg||type==QtFatalMsg)++auditCriticalCount;
  });
 }
@@ -37,7 +44,7 @@ inline void startLayoutAudit(QQuickWindow *window, const QString &outputPath) {
 #else
   const QString source=QStringLiteral("unavailable");
 #endif
-  const QJsonObject result{{"version",1},{"kind","qtquick-native-layout"},{"capturedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"sourceCommit",source},{"processId",QCoreApplication::applicationPid()},{"windowHandle",QString::number(static_cast<qulonglong>(window->winId()))},{"viewport",QJsonObject{{"width",window->width()},{"height",window->height()},{"scale",window->devicePixelRatio()}}},{"visitedItems",visited},{"truncated",truncated},{"runtime",QJsonObject{{"warningCount",auditWarningCount.load()},{"criticalCount",auditCriticalCount.load()}}},{"elements",elements}};
+  const QJsonObject result{{"version",1},{"kind","qtquick-native-layout"},{"capturedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},{"sourceCommit",source},{"processId",QCoreApplication::applicationPid()},{"windowHandle",QString::number(static_cast<qulonglong>(window->winId()))},{"viewport",QJsonObject{{"width",window->width()},{"height",window->height()},{"scale",window->devicePixelRatio()}}},{"visitedItems",visited},{"truncated",truncated},{"runtime",QJsonObject{{"warningCount",auditWarningCount.load()},{"criticalCount",auditCriticalCount.load()},{"placementWarningCount",auditPlacementWarnings.load()},{"bindingWarningCount",auditBindingWarnings.load()},{"otherWarningCount",auditOtherWarnings.load()}}},{"elements",elements}};
   QSaveFile file(outputPath); const auto bytes=QJsonDocument(result).toJson(QJsonDocument::Compact);
   if(file.open(QIODevice::WriteOnly)&&file.write(bytes)==bytes.size())file.commit();
  };
