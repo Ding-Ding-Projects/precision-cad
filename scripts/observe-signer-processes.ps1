@@ -32,7 +32,8 @@ try {
         }
         if ($mode -eq 'Win32_ProcessStartTrace') {
             try {
-                $event = $watcher.WaitForNextEvent(250)
+                $watcher.Options.Timeout = [TimeSpan]::FromMilliseconds(250)
+                $event = $watcher.WaitForNextEvent()
                 if ($null -ne $event) {
                     Write-Audit 'process-start' @{ processName=[string]$event['ProcessName']; processId=[uint32]$event['ProcessID']; parentProcessId=[uint32]$event['ParentProcessID'] }
                 }

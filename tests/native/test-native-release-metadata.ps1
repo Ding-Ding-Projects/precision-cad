@@ -43,4 +43,8 @@ $installerScript = Get-Content -Raw -LiteralPath (Join-Path $Root 'scripts/build
 Require ($appCmake.Contains('precision_cad_version.rc')) 'desktop target does not consume its version resource'
 Require ($workerCmake.Contains('precision_geometry_worker_version.rc')) 'geometry worker does not consume its version resource'
 Require ($installerScript.Contains('--setupIcon $setupIcon')) 'Squirrel package creation does not bind the project setup icon'
+Require ($installerScript.Contains("build/native/package-runtime")) 'installer packaging does not select the isolated production runtime'
+$stagingScript = Get-Content -Raw -LiteralPath (Join-Path $Root 'scripts/stage-native-runtime.ps1')
+Require ($stagingScript.Contains("buildRoot 'package-runtime'")) 'runtime staging does not create an isolated production destination'
+Require ($stagingScript.Contains("Ignoring non-production build executables")) 'runtime staging does not prove stale executable exclusion'
 Write-Output 'Validated native icon inventory and executable version-resource wiring.'

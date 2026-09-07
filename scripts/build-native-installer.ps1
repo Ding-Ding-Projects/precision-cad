@@ -89,7 +89,7 @@ try {
     & (Join-Path $PSScriptRoot 'stage-native-runtime.ps1')
     if ($LASTEXITCODE -ne 0) { throw "Native runtime staging failed with exit code $LASTEXITCODE." }
 
-$staged = Join-Path $root 'build/native/bin'
+$staged = Join-Path $root 'build/native/package-runtime'
 $packageRoot = Join-Path $root ("build/native/squirrel-package/" + $candidateShort)
 $packageRootGuard = [IO.Path]::GetFullPath((Join-Path $root 'build/native/squirrel-package')) + [IO.Path]::DirectorySeparatorChar
 if (-not ([IO.Path]::GetFullPath($packageRoot) + [IO.Path]::DirectorySeparatorChar).StartsWith($packageRootGuard, [StringComparison]::OrdinalIgnoreCase)) { throw 'Squirrel package workspace must remain inside the task-owned build directory.' }
