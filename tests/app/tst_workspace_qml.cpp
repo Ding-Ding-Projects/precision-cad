@@ -145,6 +145,16 @@ private slots:
   auto *window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window);
   auto *toolbar=root->findChild<QQuickItem*>("mainToolbar"); auto *flow=root->findChild<QQuickItem*>("toolbarFlow"); auto *workspaceSplit=root->findChild<QQuickItem*>("workspaceSplit"); auto *modelColumn=root->findChild<QQuickItem*>("modelColumn"); auto *help=root->findChild<QQuickItem*>("selectionHelp"); auto *inspectorScroll=root->findChild<QQuickItem*>("inspectorScroll"); auto *inspector=root->findChild<QQuickItem*>("inspectorColumn"); auto *version=root->findChild<QQuickItem*>("versionInfo"); auto *notice=root->findChild<QQuickItem*>("inspectorNotice");
   QVERIFY(toolbar); QVERIFY(flow); QVERIFY(workspaceSplit); QVERIFY(modelColumn); QVERIFY(help); QVERIFY(inspectorScroll); QVERIFY(inspector); QVERIFY(version); QVERIFY(notice);
+  QVERIFY(prefs.setLanguageMode("en")); QCoreApplication::processEvents();
+  const auto toolbarItems=flow->childItems();
+  const QStringList toolbarActions{"Box","New","Cylinder","Union","Cut","Intersect","Undo","Redo","Fit","Save","Open","Settings"};
+  QCOMPARE(toolbarItems.size(),toolbarActions.size()+1);
+  QVERIFY2(toolbarItems.first()->inherits("QQuickLabel"),"the first toolbar item must remain the title label");
+  for (qsizetype index=0;index<toolbarActions.size();++index) {
+   auto *action=toolbarItems.at(index+1);
+   QCOMPARE(action->property("text").toString(),toolbarActions.at(index));
+   QVERIFY2(action->inherits("QQuickToolButton"),qPrintable(QStringLiteral("toolbar action %1 must use the native QQuickToolButton primitive, actual %2").arg(toolbarActions.at(index),QString::fromLatin1(action->metaObject()->className()))));
+  }
   const QList<QSize> sizes{{1280, 820}, {1024, 700}, {800, 600}};
   const QStringList languages{"en", "yue", "both"};
   const QStringList themes{"light", "dark"};
