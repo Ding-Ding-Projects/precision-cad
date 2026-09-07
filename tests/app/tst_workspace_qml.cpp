@@ -263,7 +263,7 @@ private slots:
    QVERIFY2(help->mapRectToScene(help->boundingRect()).bottom() <= modelColumn->mapRectToScene(modelColumn->boundingRect()).bottom()+0.1, "model selection help must remain reachable at the model-pane bottom");
   }
   QVERIFY(prefs.setLanguageMode("en")); QVERIFY(prefs.setFontScale(1.0)); QVERIFY(prefs.setTheme("light")); window->resize(1280,820); QCoreApplication::processEvents(); QTest::qWait(20); QCoreApplication::processEvents();
-  QVERIFY2(version->mapRectToScene(version->boundingRect()).intersects(inspectorScroll->mapRectToScene(inspectorScroll->boundingRect())), "version provenance must be initially visible at the default client area");
+  QVERIFY2(root->findChild<QQuickItem*>("provenanceBar")->mapRectToScene(root->findChild<QQuickItem*>("provenanceBar")->boundingRect()).contains(version->mapRectToScene(version->boundingRect())), "version provenance must be initially visible at the default client area");
   QVERIFY(prefs.setLanguageMode("both")); QVERIFY(prefs.setEnglishTone(5)); QVERIFY(prefs.setCantoneseTone(5)); QVERIFY(prefs.setFontScale(1.5)); QVERIFY(prefs.setTheme("dark")); window->resize(800,600); QCoreApplication::processEvents(); QTest::qWait(20); QCoreApplication::processEvents();
   QVERIFY2(qAbs(toolbar->height()-(flow->implicitHeight()+toolbar->property("topPadding").toReal()+toolbar->property("bottomPadding").toReal())) < 0.1, "high-content toolbar must include its visible Flow and native vertical insets");
   const QRectF highToolbarRect=toolbar->mapRectToScene(toolbar->boundingRect()); QCOMPARE(flow->childItems().size(), 13);
