@@ -20,12 +20,16 @@ try {
   $windowsPowerShell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $observer=Join-Path $root 'scripts\observe-signer-processes.ps1'
   $arguments=('-NoProfile -ExecutionPolicy Bypass -File "{0}" -LogPath "{1}" -ReadyPath "{2}" -StopPath "{3}" -SessionId "{4}"' -f $observer,$log,$ready,$stop,$session)
-  $process=Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -PassThru
+  $stderr=Join-Path $temporary 'observer.stderr.log'
+  $startInfo=[Diagnostics.ProcessStartInfo]::new(); $startInfo.FileName=$windowsPowerShell; $startInfo.Arguments=$arguments; $startInfo.UseShellExecute=$false; $startInfo.CreateNoWindow=$true; $startInfo.RedirectStandardError=$true
+  $process=[Diagnostics.Process]::new(); $process.StartInfo=$startInfo; if(-not $process.Start()){throw 'real observer could not start'}
   $deadline=[DateTimeOffset]::UtcNow.AddSeconds(10)
   while(-not (Test-Path -LiteralPath $ready) -and [DateTimeOffset]::UtcNow -lt $deadline){Start-Sleep -Milliseconds 50}
   if(-not (Test-Path -LiteralPath $ready)){throw 'real observer did not become ready'}
   Set-Content -LiteralPath $stop -Value $session -Encoding ascii -NoNewline
   if(-not $process.WaitForExit(10000)){throw 'real observer did not stop'}
+  $process.Refresh()
+  Set-Content -LiteralPath $stderr -Value $process.StandardError.ReadToEnd() -Encoding utf8
   if($process.ExitCode -ne 0){throw "real observer exit code was $($process.ExitCode)"}
   $records=@(Get-Content -LiteralPath $log|ForEach-Object{$_|ConvertFrom-Json}); Validate $records
   $terminal=@($records|Where-Object kind -eq 'terminal')[0]

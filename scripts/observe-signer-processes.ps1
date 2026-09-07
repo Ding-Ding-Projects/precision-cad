@@ -66,3 +66,4 @@ if ($null -ne $failure -or $null -ne $cleanupFailure) {
     throw $cleanupFailure
 }
 Write-Audit 'terminal' @{ healthy=$true; stopRequested=$true; mode=$mode; exhaustive=($mode -eq 'Win32_ProcessStartTrace') }
+exit 0
