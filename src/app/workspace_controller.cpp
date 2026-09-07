@@ -5,12 +5,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUuid>
+#include <algorithm>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 
 using namespace precision::core;
-namespace { constexpr int kMaxWorkerReply = 8 * 1024 * 1024; constexpr int kWorkerTimeoutMs = 45000; }
+namespace { constexpr int kMaxWorkerReply = 8 * 1024 * 1024; constexpr int kWorkerTimeoutMs = 45000; int workerTimeoutMs() { bool ok=false; const int configured=qEnvironmentVariableIntValue("PRECISION_WORKER_TIMEOUT_MS",&ok); return ok ? std::clamp(configured,1,kWorkerTimeoutMs) : kWorkerTimeoutMs; } }
 
 WorkspaceController::WorkspaceController(QObject *parent)
   : QObject(parent), m_document(DocumentRecord{kDocumentSchemaVersion, QUuid::createUuid().toString(QUuid::WithoutBraces), 0, QStringLiteral("mm"), {}}) {
@@ -18,7 +19,7 @@ WorkspaceController::WorkspaceController(QObject *parent)
   connect(&m_timeout, &QTimer::timeout, this, [this] { cancel(); fail(tr("Geometry worker timed out.")); });
   connect(&m_worker, &QProcess::started, this, [this] {
     if (!applyWorkerLimits()) { m_worker.kill(); fail(tr("Geometry worker resource boundary could not be applied.")); return; }
-    m_worker.write(m_activeRequest); m_worker.closeWriteChannel(); m_timeout.start(kWorkerTimeoutMs);
+    m_worker.write(m_activeRequest); m_worker.closeWriteChannel(); m_timeout.start(workerTimeoutMs());
   });
   connect(&m_worker, &QProcess::readyReadStandardOutput, this, [this] {
     if (m_worker.bytesAvailable() > kMaxWorkerReply) { cancel(); fail(tr("Geometry worker reply exceeded the configured limit.")); }

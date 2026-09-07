@@ -33,6 +33,7 @@ ApplicationWindow {
   }
   FileDialog { id: saveDialog; title: "Save native Precision CAD document"; fileMode: FileDialog.SaveFile; nameFilters: ["Precision CAD (*.pcad)"]; onAccepted: workspace.save(selectedFile.toLocalFile()) }
   FileDialog { id: openDialog; title: "Open native Precision CAD document"; fileMode: FileDialog.OpenFile; nameFilters: ["Precision CAD (*.pcad)"]; onAccepted: workspace.open(selectedFile.toLocalFile()) }
+  FileDialog { id: vocabularyDialog; title: "Load local vocabulary"; fileMode: FileDialog.OpenFile; nameFilters: ["Vocabulary JSON (*.json)"]; onAccepted: vocabulary.loadFile(selectedFile.toLocalFile()) }
   Dialog { id: unsavedDialog; title: preferences.dialogEmojis ? "⚠ Unsaved changes" : "Unsaved changes"; modal: true; standardButtons: Dialog.NoButton
     Column { padding: 20; spacing: 12
       Label { text: "Save changes before continuing?" }
@@ -56,6 +57,9 @@ ApplicationWindow {
        Slider { from:.8; to:1.5; value:preferences.fontScale; onMoved: preferences.setFontScale(value) }
       Switch { text:"Reduced motion"; checked:preferences.reducedMotion; onToggled:preferences.setReducedMotion(checked) }
       Switch { text:"ADHD mode"; checked:preferences.adhdMode; onToggled:preferences.setAdhdMode(checked) }
+      Label { text: vocabulary.loaded ? "Local vocabulary is loaded for this private session." : "Local vocabulary is not loaded."; wrapMode: Text.WordWrap }
+      Button { text: vocabulary.loaded ? "Replace local vocabulary" : "Load local vocabulary"; onClicked: vocabularyDialog.open() }
+      Button { text: "Clear local vocabulary"; enabled: vocabulary.loaded; onClicked: vocabulary.clear() }
       Label { text: "Narration is stored but unavailable until a local voice runtime is integrated."; wrapMode: Text.WordWrap }
     }
   }
