@@ -85,22 +85,23 @@ Result readBounded(QFile &file, QByteArray *out) {
 bool duplicateObjectKey(const QByteArray &json) {
     int pos = 0;
     auto whitespace = [&] { while (pos < json.size() && QByteArray(" \t\r\n").contains(json[pos])) ++pos; };
-    std::function<bool()> value;
-    std::function<bool()> object = [&] {
-        if (pos >= json.size() || json[pos++] != '{') return false; whitespace(); QSet<QByteArray> keys;
+    std::function<bool(int)> value;
+    std::function<bool(int)> object = [&](int depth) {
+        if (depth > kMaxJsonDepth) return true;
+        if (pos >= json.size() || json[pos++] != '{') return false; whitespace(); QSet<QString> keys;
         if (pos < json.size() && json[pos] == '}') { ++pos; return false; }
         while (pos < json.size()) {
-            whitespace(); if (pos >= json.size() || json[pos++] != '"') return false; QByteArray key;
-            while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; key += json[pos++]; }
-            if (pos >= json.size()) return false; ++pos; if (keys.contains(key)) return true; keys.insert(key); whitespace();
-            if (pos >= json.size() || json[pos++] != ':') return false; if (value()) return true; whitespace();
+            whitespace(); if (pos >= json.size() || json[pos] != '"') return false; const int start = pos++;
+            while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; ++pos; }
+            if (pos >= json.size()) return false; const QByteArray rawToken = json.mid(start, ++pos - start); QJsonParseError keyError; const auto keyDoc = QJsonDocument::fromJson(QByteArray("[") + rawToken + ']', &keyError); if (keyError.error != QJsonParseError::NoError || !keyDoc.isArray() || keyDoc.array().size() != 1 || !keyDoc.array().first().isString()) return false; const QString key = keyDoc.array().first().toString(); if (keys.contains(key)) return true; keys.insert(key); whitespace();
+            if (pos >= json.size() || json[pos++] != ':') return false; if (value(depth + 1)) return true; whitespace();
             if (pos >= json.size()) return false; if (json[pos] == '}') { ++pos; return false; } if (json[pos++] != ',') return false;
         }
         return false;
     };
-    std::function<bool()> array = [&] { if (pos >= json.size() || json[pos++] != '[') return false; whitespace(); if (pos < json.size() && json[pos] == ']') { ++pos; return false; } while (pos < json.size()) { if (value()) return true; whitespace(); if (pos >= json.size()) return false; if (json[pos] == ']') { ++pos; return false; } if (json[pos++] != ',') return false; } return false; };
-    value = [&] { whitespace(); if (pos >= json.size()) return false; if (json[pos] == '{') return object(); if (json[pos] == '[') return array(); if (json[pos] == '"') { ++pos; while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; ++pos; } if (pos >= json.size()) return false; ++pos; return false; } while (pos < json.size() && !QByteArray(" \t\r\n,]}").contains(json[pos])) ++pos; return false; };
-    return value();
+    std::function<bool(int)> array = [&](int depth) { if (depth > kMaxJsonDepth) return true; if (pos >= json.size() || json[pos++] != '[') return false; whitespace(); if (pos < json.size() && json[pos] == ']') { ++pos; return false; } while (pos < json.size()) { if (value(depth + 1)) return true; whitespace(); if (pos >= json.size()) return false; if (json[pos] == ']') { ++pos; return false; } if (json[pos++] != ',') return false; } return false; };
+    value = [&](int depth) { whitespace(); if (pos >= json.size()) return false; if (json[pos] == '{') return object(depth); if (json[pos] == '[') return array(depth); if (json[pos] == '"') { ++pos; while (pos < json.size() && json[pos] != '"') { if (json[pos] == '\\' && ++pos >= json.size()) return false; ++pos; } if (pos >= json.size()) return false; ++pos; return false; } while (pos < json.size() && !QByteArray(" \t\r\n,]}").contains(json[pos])) ++pos; return false; };
+    return value(0);
 }
 }
 
@@ -178,7 +179,7 @@ Result Document::parse(const QByteArray &json, DocumentRecord *out) {
 Result DocumentStorage::save(const QString &path, const DocumentRecord &record, std::optional<quint64> expectedPersistedRevision) {
     if (auto r = Document::validate(record); !r.ok) return r;
     QLockFile lock(path + QStringLiteral(".lock")); lock.setStaleLockTime(0); if (!lock.tryLock(0)) return Result::failure(QStringLiteral("Document is locked by another writer"));
-    QFile current(path); if (current.exists()) { if (!current.open(QIODevice::ReadOnly)) return Result::failure(QStringLiteral("Could not read existing document")); QByteArray old; if (auto r = readBounded(current, &old); !r.ok) return r; current.close(); DocumentRecord parsed; if (auto r = Document::parse(old, &parsed); !r.ok) return Result::failure(QStringLiteral("Refusing to overwrite invalid existing document: %1").arg(r.error)); if (!expectedPersistedRevision || parsed.revision != *expectedPersistedRevision) return Result::failure(QStringLiteral("Persisted document revision changed")); QSaveFile backup(path + QStringLiteral(".bak")); if (!backup.open(QIODevice::WriteOnly) || backup.write(old) != old.size() || !backup.commit()) return Result::failure(QStringLiteral("Could not preserve valid backup")); }
+    QFile current(path); if (current.exists()) { if (!current.open(QIODevice::ReadOnly)) return Result::failure(QStringLiteral("Could not read existing document")); QByteArray old; if (auto r = readBounded(current, &old); !r.ok) return r; current.close(); DocumentRecord parsed; if (auto r = Document::parse(old, &parsed); !r.ok) return Result::failure(QStringLiteral("Refusing to overwrite invalid existing document: %1").arg(r.error)); if (!expectedPersistedRevision || parsed.revision != *expectedPersistedRevision) return Result::failure(QStringLiteral("Persisted document revision changed")); if (parsed.documentId != record.documentId) return Result::failure(QStringLiteral("Persisted document identity changed")); const QByteArray next = Document::serialize(record); if (record.revision < parsed.revision) return Result::failure(QStringLiteral("Document revision must advance")); if (record.revision == parsed.revision) return next == old ? Result::success() : Result::failure(QStringLiteral("Same revision has different document bytes")); QSaveFile backup(path + QStringLiteral(".bak")); if (!backup.open(QIODevice::WriteOnly) || backup.write(old) != old.size() || !backup.commit()) return Result::failure(QStringLiteral("Could not preserve valid backup")); }
     else if (expectedPersistedRevision) return Result::failure(QStringLiteral("Expected persisted document does not exist"));
     QSaveFile file(path); const auto bytes = Document::serialize(record); if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) return Result::failure(QStringLiteral("Atomic save failed: %1").arg(file.errorString()));
     return Result::success();
