@@ -80,16 +80,19 @@ private slots:
   window->show();QCoreApplication::processEvents();
   QVERIFY(mesh->valid());QCOMPARE(mesh->localPositions().size(),6);QVERIFY(mesh->boundsMax().x()>mesh->boundsMin().x());QCOMPARE(camera->geometry(),mesh);
   QCOMPARE(camera->viewportSize(),QSizeF(viewport->width(),viewport->height()));
-  camera->standardView(1);camera->fit();
+  camera->standardView(5);camera->fit();
   const QPointF center(viewport->width()/2,viewport->height()/2);
   const auto hit=camera->pick(center.x(),center.y());QCOMPARE(hit.value("bodyId").toString(),QString("near"));QCOMPARE(hit.value("triangleIndex").toInt(),1);QCOMPARE(hit.value("kind").toString(),QString("meshTriangle"));
   QVERIFY(std::abs(hit.value("position").toList()[2].toDouble()-(origin+1))<.001);
   QCOMPARE(native->property("camera").value<QObject*>(),perspective);
   QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
   QCOMPARE(perspective->property("rotation").value<QQuaternion>(),camera->orientation());
+  const auto topForward=perspective->property("rotation").value<QQuaternion>().rotatedVector({0,0,-1});QVERIFY((topForward-QVector3D(0,0,-1)).length()<1e-5);
+  camera->standardView(1);const auto frontRotation=perspective->property("rotation").value<QQuaternion>();QVERIFY((frontRotation.rotatedVector({0,0,-1})-QVector3D(0,1,0)).length()<1e-5);QVERIFY((frontRotation.rotatedVector({0,1,0})-QVector3D(0,0,1)).length()<1e-5);camera->standardView(5);
+
   const auto originalEye=camera->eye();camera->orbit(60,20);QVERIFY(camera->eye()!=originalEye);
   QCOMPARE(perspective->property("position").value<QVector3D>(),camera->eye());
-  camera->standardView(1);camera->fit();
+  camera->standardView(5);camera->fit();
   const auto panPoint=camera->center();const auto beforePan=camera->project(panPoint);camera->pan(23,-17);
   const auto afterPan=camera->project(panPoint);QVERIFY((afterPan-beforePan-QPointF(23,-17)).manhattanLength()<.001);
   const auto beforeZoom=camera->distance();camera->zoomBy(.5);QVERIFY(camera->distance()<beforeZoom);
@@ -106,7 +109,7 @@ private slots:
   QCOMPARE(mesh->selectedBodyId(),QString("far"));QCOMPARE(mesh->selectedTriangleCount(),1);QCOMPARE(camera->eye(),selectionEye);QCOMPARE(camera->center(),selectionTarget);
   const auto recolored=mesh->vertexData();QVERIFY(recolored!=colored);
 
-  camera->standardView(1);camera->fit();const auto panOrigin=camera->center();
+  camera->standardView(5);camera->fit();const auto panOrigin=camera->center();
   QTest::mousePress(window,Qt::RightButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(25,10));QTest::mouseRelease(window,Qt::RightButton,Qt::NoModifier,click+QPoint(25,10));QVERIFY(camera->center()!=panOrigin);
   const auto dragEye=camera->eye();QTest::mousePress(window,Qt::LeftButton,Qt::NoModifier,click);QTest::mouseMove(window,click+QPoint(35,15));QTest::mouseRelease(window,Qt::LeftButton,Qt::NoModifier,click+QPoint(35,15));QVERIFY(camera->eye()!=dragEye);
   for(int view=0;view<7;++view) { QObject *button=nullptr;for(auto *item:root->findChild<QQuickItem*>("viewControls")->childItems())if(item->objectName()=="standardView"+QString::number(view))button=item;QVERIFY(button);QVERIFY(QMetaObject::invokeMethod(button,"clicked"));camera->fit();QVERIFY((camera->project(camera->center())-center).manhattanLength()<.01); }

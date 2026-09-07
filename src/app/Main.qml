@@ -174,6 +174,7 @@ ApplicationWindow {
           onWheel: (w)=> { cameraState.zoomBy(Math.exp(-w.angleDelta.y*.001)); w.accepted=true }
         }
         Flow { objectName: "viewControls"; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: 4
+      Label { text: root.copy("Z up · XY top", "Z 向上 · XY 頂視"); Accessible.name: root.copy("CAD axes: Z up; top view is the XY plane", "CAD 座標：Z 向上，頂視為 XY 平面"); padding: 8 }
       ToolButton { objectName: "projectionButton"; text: cameraState.perspective ? root.copy("Orthographic", "正投影") : root.copy("Perspective", "透視"); onClicked: cameraState.perspective=!cameraState.perspective }
       Repeater { model: [root.copy("Iso","等角"),root.copy("Front","前"),root.copy("Back","後"),root.copy("Left","左"),root.copy("Right","右"),root.copy("Top","頂"),root.copy("Bottom","底")]
         ToolButton { required property int index; required property string modelData; objectName: "standardView"+index; text: modelData; onClicked: cameraState.standardView(index) }

@@ -40,10 +40,19 @@ private slots:
     camera.setStandardView(precision::app::viewport::StandardView::Front);
 
     const auto ray = camera.rayForScreenPoint(QPointF(400.0, 300.0));
-    QVERIFY(ray.origin.z() > 5.0f);
-    verifyVectorNear(ray.direction, QVector3D(0.0f, 0.0f, -1.0f));
+    QVERIFY(ray.origin.y() < -5.0f);
+    verifyVectorNear(ray.direction, QVector3D(0.0f, 1.0f, 0.0f));
   }
 
+  void cadViewsUseZUpAndExactPlanProjection() {
+    precision::app::viewport::ViewportCamera camera;camera.setViewport({800,600});camera.setSceneBounds({-5,-5,-5},{5,5,5});camera.setProjection(precision::app::viewport::Projection::Orthographic);
+    camera.standardView(5);verifyVectorNear(camera.rayForScreenPoint({400,300}).direction,{0,0,-1});verifyVectorNear(camera.up(),{0,1,0});
+    QVERIFY(camera.project({1,0,0}).x()>400);QVERIFY(camera.project({0,1,0}).y()<300);QVERIFY((camera.project({0,0,1})-QPointF(400,300)).manhattanLength()<.001);
+    camera.standardView(1);verifyVectorNear(camera.rayForScreenPoint({400,300}).direction,{0,1,0});verifyVectorNear(camera.up(),{0,0,1});QVERIFY(camera.project({0,0,1}).y()<300);
+    camera.standardView(4);verifyVectorNear(camera.rayForScreenPoint({400,300}).direction,{-1,0,0});verifyVectorNear(camera.up(),{0,0,1});
+    camera.standardView(0);QVERIFY(camera.eye().x()>0);QVERIFY(camera.eye().y()<0);QVERIFY(camera.eye().z()>0);
+    verifyVectorNear(camera.orientation().rotatedVector({0,0,-1}),camera.rayForScreenPoint({400,300}).direction);
+  }
   void standardViewsAndOrbitKeepSceneCenterAtViewportCenter() {
     precision::app::viewport::ViewportCamera camera;
     camera.setViewport({800.0, 600.0});
