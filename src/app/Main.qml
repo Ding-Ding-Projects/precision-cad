@@ -18,6 +18,7 @@ ApplicationWindow {
   property string vocabularyStatus: ""
   property string selectedLeft: ""; property string selectedRight: ""
   property string dimensionType: ""
+  property string editTargetId: ""
   property string deferredAction: ""
   property url documentFolder: typeof initialDocumentFolder === "undefined" ? "" : initialDocumentFolder
   function copy(en, yue) {
@@ -32,7 +33,7 @@ ApplicationWindow {
   }
   function guard(action) { if(workspace.busy) return; if (workspace.dirty) { deferredAction = action; unsavedDialog.open() } else perform(action) }
   function perform(action) { if(action === "new") workspace.newDocument(); else if(action === "open") openDialog.open(); else if(action === "close") { allowClose=true; root.close() } }
-  function openDimensions() { var dimensions=workspace.editableDimensions(selectedLeft); if (!dimensions.editable) return; dimensionType=dimensions.type; dimA.text=dimensions.first; dimB.text=dimensions.second; dimC.text=dimensions.type === "box" ? dimensions.third : ""; dimensionsDialog.open() }
+  function openDimensions() { var target=workspace.selectedBody; var dimensions=workspace.editableDimensions(target); if (!dimensions.editable || workspace.busy) return; editTargetId=target; dimensionType=dimensions.type; dimA.text=dimensions.first; dimB.text=dimensions.second; dimC.text=dimensions.type === "box" ? dimensions.third : ""; dimensionsDialog.open() }
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
     objectName: "mainToolbar"
@@ -59,6 +60,7 @@ ApplicationWindow {
   FileDialog { id: vocabularyDialog; currentFolder: root.documentFolder; title: root.copy("Load local vocabulary","載入本機詞彙"); fileMode: FileDialog.OpenFile; nameFilters: [root.copy("Vocabulary JSON","詞彙 JSON") + " (*.json)"]; onAccepted: { root.vocabularyStatus = uiText.loadVocabulary(selectedFile) ? root.copy("Local vocabulary loaded.","已載入本機詞彙。") : root.copy("Local vocabulary was not loaded.","未能載入本機詞彙。") } }
   Connections { target: workspace
     function onSaveFinished(ok, message) { var next=root.saveForDeferred ? root.deferredAction : ""; root.deferredAction=""; root.saveForDeferred=false; if(ok && next!=="") root.perform(next) }
+    function onDocumentChanged() { root.selectedLeft=""; root.selectedRight=""; if (dimensionsDialog.visible) dimensionsDialog.close(); root.editTargetId="" }
   }
   Dialog { id: unsavedDialog; objectName: "unsavedDialog"; onRejected: { root.deferredAction=""; root.saveForDeferred=false } title: (preferences.dialogEmojis ? "⚠ " : "") + root.copy("Unsaved changes","未儲存的變更"); modal: true; standardButtons: Dialog.NoButton
     Column { padding: 20; spacing: 12
@@ -128,7 +130,7 @@ ApplicationWindow {
             }
           }
         }
-        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: workspace.editableDimensions(root.selectedLeft).editable; onClicked: root.openDimensions() }
+        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: !workspace.busy && workspace.editableDimensions(workspace.selectedBody).editable; onClicked: root.openDimensions() }
         Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
@@ -160,7 +162,8 @@ ApplicationWindow {
   }
   Dialog { id: dimensionsDialog; title: root.copy("Edit dimensions","編輯尺寸"); modal: true; standardButtons: Dialog.NoButton
     footer: DialogButtonBox { Button { text: root.copy("OK","確定"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole } Button { text: root.copy("Cancel","取消"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole } }
-    onAccepted: workspace.updateDimensions(root.selectedLeft, Number(dimA.text), Number(dimB.text), root.dimensionType === "box" ? Number(dimC.text) : 1)
+    onAccepted: { if (root.editTargetId !== "" && !workspace.busy) workspace.updateDimensions(root.editTargetId, Number(dimA.text), Number(dimB.text), root.dimensionType === "box" ? Number(dimC.text) : 1); root.editTargetId="" }
+    onRejected: root.editTargetId=""
     Grid { columns:2; padding:16; spacing:8
       Label { textFormat: Text.PlainText; text: root.dimensionType === "cylinder" ? root.copy("Radius (mm)","半徑（毫米）") : root.copy("X (mm)","X（毫米）") }
       TextField { id:dimA; validator: DoubleValidator { bottom: 0.001 } }
