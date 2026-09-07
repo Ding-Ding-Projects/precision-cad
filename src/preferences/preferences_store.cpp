@@ -100,10 +100,11 @@ bool PreferencesStore::setNarrationPitch(double v) { if (!validFinite(v,kMinNarr
 bool PreferencesStore::reset() { if (m_loadedCorrupt && !preserveCorruptRecord()) return false; return replace(Values{}, true); }
 
 bool PreferencesStore::replace(const Values &candidate, bool forcePersist) {
+    if (m_loadedCorrupt && !forcePersist) { fail("corrupt preferences require explicit reset before changes"); return false; }
     const Values before=*m_values;
     if (!forcePersist && candidate.languageMode==before.languageMode && candidate.englishTone==before.englishTone && candidate.cantoneseTone==before.cantoneseTone && candidate.dialogEmojis==before.dialogEmojis && candidate.theme==before.theme && candidate.fontScale==before.fontScale && candidate.accentColor==before.accentColor && candidate.reducedMotion==before.reducedMotion && candidate.adhdMode==before.adhdMode && candidate.narrationEnabled==before.narrationEnabled && candidate.narrationLanguage==before.narrationLanguage && candidate.englishVoiceId==before.englishVoiceId && candidate.cantoneseVoiceId==before.cantoneseVoiceId && candidate.narrationRate==before.narrationRate && candidate.narrationPitch==before.narrationPitch) return true;
     if (!persist(candidate)) return false;
-    *m_values=candidate; publishChanges(before); return true;
+    *m_values=candidate; m_loadedCorrupt=false; publishChanges(before); return true;
 }
 
 bool PreferencesStore::persist(const Values &v) {

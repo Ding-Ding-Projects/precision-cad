@@ -46,7 +46,7 @@ bool PersonalVocabularyStore::loadBytes(const QByteArray &bytes, bool persist) {
     if (persist) { QDir().mkpath(QFileInfo(m_cachePath).absolutePath()); QSaveFile output(m_cachePath); if (!output.open(QIODevice::WriteOnly) || output.write(bytes)!=bytes.size() || !output.commit()) { fail("personal vocabulary cache write failed"); return false; } }
     const bool changed = m_entries != candidate; m_entries=std::move(candidate); if(changed) emit loadedChanged(); return true;
 }
-bool PersonalVocabularyStore::clear() { const bool was=loaded(); m_entries.clear(); QFile::remove(m_cachePath); if(was) emit loadedChanged(); return true; }
+bool PersonalVocabularyStore::clear() { const bool was=loaded(); if (QFile::exists(m_cachePath) && !QFile::remove(m_cachePath)) { fail("personal vocabulary cache could not be cleared"); return false; } m_entries.clear(); if(was) emit loadedChanged(); return true; }
 QString PersonalVocabularyStore::applyPrivateUiText(const QString &text) const { QString result=text; for(auto it=m_entries.cbegin();it!=m_entries.cend();++it) result.replace(it.key(),it.value()); return result; }
 void PersonalVocabularyStore::fail(const QString &message) { emit errorOccurred(message); }
 } // namespace precision::preferences
