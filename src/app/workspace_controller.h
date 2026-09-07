@@ -13,6 +13,8 @@ class WorkspaceController final : public QObject {
   Q_PROPERTY(QVariantList features READ features NOTIFY documentChanged)
   Q_PROPERTY(QVariantList meshVertices READ meshVertices NOTIFY meshChanged)
   Q_PROPERTY(QVariantList meshIndices READ meshIndices NOTIFY meshChanged)
+  Q_PROPERTY(QVariantList meshNormals READ meshNormals NOTIFY meshChanged)
+  Q_PROPERTY(QVariantList meshParts READ meshParts NOTIFY meshChanged)
   Q_PROPERTY(QString operationState READ operationState NOTIFY operationStateChanged)
   Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY operationStateChanged)
   Q_PROPERTY(QString volume READ volume NOTIFY measurementsChanged)
@@ -29,7 +31,7 @@ public:
   Q_INVOKABLE QString localPath(const QUrl &url) const { return url.isLocalFile() ? url.toLocalFile() : QString(); }
   explicit WorkspaceController(QObject *parent = nullptr);
   ~WorkspaceController() override;
-  QVariantList features() const; QVariantList meshVertices() const { return m_meshVertices; } QVariantList meshIndices() const { return m_meshIndices; }
+  QVariantList features() const; QVariantList meshVertices() const { return m_meshVertices; } QVariantList meshIndices() const { return m_meshIndices; } QVariantList meshNormals() const { return m_meshNormals; } QVariantList meshParts() const { return m_meshParts; }
   QString operationState() const { return m_state; } QString errorMessage() const { return m_error; } QString volume() const { return m_volume; } QString bounds() const { return m_bounds; } bool dirty() const { return m_dirty; }
   Q_INVOKABLE void addBox(double dx, double dy, double dz);
   Q_INVOKABLE void addCylinder(double radius, double height);
@@ -48,17 +50,20 @@ private:
   void runNext(); void fail(const QString &message); void commitCandidate();
   bool applyWorkerLimits(); void releaseWorkerLimits();
   QJsonObject requestFor(const precision::core::Feature &feature) const;
+  QVector<QString> terminalBodyIds() const;
+  void updateScene();
   precision::core::Document m_document;
   std::unique_ptr<precision::core::Document> m_candidate;
   QVector<precision::core::Feature> m_pending; int m_index = 0; Reply m_results;
   std::unique_ptr<QProcess> m_worker; QTimer m_timeout; quint64 m_generation = 0, m_loadedRevision = 0; QString m_path;
-  QVariantList m_meshVertices, m_meshIndices; QString m_state = QStringLiteral("Ready"), m_error, m_volume = QStringLiteral("Unavailable"), m_bounds = QStringLiteral("Unavailable"); bool m_dirty = false;
+  QVariantList m_meshVertices, m_meshIndices, m_meshNormals, m_meshParts; QString m_state = QStringLiteral("Ready"), m_error, m_volume = QStringLiteral("Unavailable"), m_bounds = QStringLiteral("Unavailable"); bool m_dirty = false;
   QByteArray m_activeRequest, m_output, m_errors;
   QString m_operationId, m_baseId, m_candidatePath, m_selectedBody;
   quint64 m_baseRevision = 0;
   qint64 m_resultBytes = 0, m_resultLimit = 64 * 1024 * 1024;
   bool m_opening = false;
   Reply m_committedResults;
+  QVector<precision::core::Feature> m_committedFeatures;
   void stopWorker(); void drainWorker(bool errors);
   bool validResult(const QJsonObject &result) const;
   void *m_job = nullptr;

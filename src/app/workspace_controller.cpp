@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
 #include <QUuid>
 #include <algorithm>
 #include <cmath>
@@ -108,17 +109,31 @@ void WorkspaceController::stopWorker() {
   releaseWorkerLimits(); old->deleteLater();
 }
 void WorkspaceController::selectBody(const QString &id) {
-  m_selectedBody=m_committedResults.contains(id)?id:QString(); const auto result=m_committedResults.value(m_selectedBody); const auto mesh=result.value("mesh").toObject();
-  m_meshVertices=mesh.value("vertices").toArray().toVariantList(); m_meshIndices=mesh.value("indices").toArray().toVariantList();
+  m_selectedBody=m_committedResults.contains(id)?id:QString(); updateScene();
+}
+QVector<QString> WorkspaceController::terminalBodyIds() const {
+  QSet<QString> consumed;
+  for(const Feature &feature:m_committedFeatures) if(m_committedResults.contains(feature.id)) for(const QString &input:feature.inputRefs) consumed.insert(input);
+  QVector<QString> ids;
+  for(const Feature &feature:m_committedFeatures) if(m_committedResults.contains(feature.id) && !consumed.contains(feature.id)) ids.append(feature.id);
+  return ids;
+}
+void WorkspaceController::updateScene() {
+  const QVector<QString> terminals=terminalBodyIds(); QVector<QString> visible;
+  if(m_selectedBody.isEmpty() || terminals.contains(m_selectedBody)) visible=terminals; else visible={m_selectedBody};
+  m_meshParts.clear();
+  for(const QString &id:visible) { const auto mesh=m_committedResults.value(id).value("mesh").toObject(); m_meshParts << QVariantMap{{"bodyId",id},{"vertices",mesh.value("vertices").toArray().toVariantList()},{"indices",mesh.value("indices").toArray().toVariantList()},{"normals",mesh.value("normals").toArray().toVariantList()}}; }
+  const QString legacy=m_selectedBody.isEmpty() ? (visible.isEmpty()?QString():visible.first()) : m_selectedBody; const auto result=m_committedResults.value(legacy); const auto mesh=result.value("mesh").toObject();
+  m_meshVertices=mesh.value("vertices").toArray().toVariantList(); m_meshIndices=mesh.value("indices").toArray().toVariantList(); m_meshNormals=mesh.value("normals").toArray().toVariantList();
   m_volume=result.isEmpty()?tr("Unavailable"):QString::number(result.value("volume").toDouble(),'g',12)+tr(" mm\u00b3");
   const auto b=result.value("bounds").toArray(); m_bounds=b.size()!=6?tr("Unavailable"):QStringLiteral("[%1, %2, %3] to [%4, %5, %6] mm").arg(b[0].toDouble()).arg(b[1].toDouble()).arg(b[2].toDouble()).arg(b[3].toDouble()).arg(b[4].toDouble()).arg(b[5].toDouble()); emit meshChanged(); emit measurementsChanged();
 }
 void WorkspaceController::commitCandidate() {
   if(!m_candidate || m_document.record().documentId!=m_baseId || m_document.record().revision!=m_baseRevision) { fail(tr("Document changed while geometry was running.")); return; }
-  stopWorker(); m_document=std::move(*m_candidate); m_candidate.reset(); m_committedResults=m_results;
+  stopWorker(); m_document=std::move(*m_candidate); m_candidate.reset(); m_committedResults=m_results; m_committedFeatures=m_pending;
   if(m_opening) { m_path=m_candidatePath; m_loadedRevision=m_document.record().revision; }
   m_dirty=!m_opening; m_opening=false; m_candidatePath.clear(); m_state=tr("Ready"); m_error.clear();
-  selectBody(m_committedResults.contains(m_selectedBody)?m_selectedBody:(m_pending.isEmpty()?QString():m_pending.last().id));
+  m_selectedBody.clear(); updateScene();
   emit documentChanged(); emit operationStateChanged(); emit dirtyChanged();
 }
 void WorkspaceController::fail(const QString &message) {
@@ -138,4 +153,4 @@ void WorkspaceController::open(const QString &path) {
   if(!r.ok) { fail(r.error); return; } if(record.units!="mm") { fail(tr("Only millimetre documents are supported. Convert units before opening.")); return; }
   try { Document candidate(record); m_candidatePath=QFileInfo(path).absoluteFilePath(); m_opening=true; regenerate(std::move(candidate)); } catch(const std::exception &e) { fail(QString::fromUtf8(e.what())); }
 }
-void WorkspaceController::newDocument() { if(m_candidate) return; ++m_generation; m_document=Document(DocumentRecord{kDocumentSchemaVersion,QUuid::createUuid().toString(QUuid::WithoutBraces),0,QStringLiteral("mm"),{}}); m_path.clear();m_loadedRevision=0;m_dirty=false;m_committedResults.clear();selectBody({});m_state=tr("Ready");m_error.clear();emit documentChanged();emit dirtyChanged();emit operationStateChanged(); }
+void WorkspaceController::newDocument() { if(m_candidate) return; ++m_generation; m_document=Document(DocumentRecord{kDocumentSchemaVersion,QUuid::createUuid().toString(QUuid::WithoutBraces),0,QStringLiteral("mm"),{}}); m_path.clear();m_loadedRevision=0;m_dirty=false;m_committedResults.clear();m_committedFeatures.clear();selectBody({});m_state=tr("Ready");m_error.clear();emit documentChanged();emit dirtyChanged();emit operationStateChanged(); }
