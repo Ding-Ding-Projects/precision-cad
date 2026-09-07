@@ -4,6 +4,8 @@
 /.cache/
 /.venv/
 /artifacts/
+/dist/
+/node_modules/
 *.user
 *.log
 __pycache__/

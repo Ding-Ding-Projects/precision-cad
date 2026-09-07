@@ -1,0 +1,12 @@
+{
+  "name": "precision-cad-project",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix website run build && node scripts/stage-website.mjs",
+    "dev": "npm --prefix website run dev",
+    "install:website": "npm --prefix website ci"
+  },
+  "engines": { "node": ">=22.13.0" }
+}

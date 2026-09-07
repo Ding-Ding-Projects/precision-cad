@@ -16,9 +16,20 @@ Until the bootstrap and packaged application are verified, this command is not c
 
 ## Documentation
 
+- [Project website](https://ding-ding-projects.github.io/precision-cad/) (initial deployment in progress)
+
 - [Architecture](docs/engineering/architecture.md)
 - [Feature documentation](docs/README.md)
 - [Roadmap](ROADMAP.md)
 - [Current implementation evidence](HANDOFF.md)
 
 Source is intended for distribution under GPL-3.0-or-later. Third-party components retain their own licenses. This application does not command connected machinery or certify structural safety.
+
+## Development surfaces
+
+- [Delivery project](https://github.com/orgs/Ding-Ding-Projects/projects/36)
+- [Discussions](https://github.com/Ding-Ding-Projects/precision-cad/discussions)
+- [Issue tracker](https://github.com/Ding-Ding-Projects/precision-cad/issues)
+- [Website build details](docs/engineering/build.md)
+
+The current build produces the website only. No native CAD executable or installer exists yet.

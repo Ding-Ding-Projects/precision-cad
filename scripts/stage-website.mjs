@@ -1,0 +1,11 @@
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { resolve, relative } from 'node:path';
+const root=resolve(import.meta.dirname,'..');
+const source=resolve(root,'website/dist/client');
+const target=resolve(root,'dist');
+if(!existsSync(resolve(source,'index.html')))throw new Error('Missing exported website index.html');
+if(relative(root,target)!=='dist')throw new Error('Invalid staging destination');
+mkdirSync(target,{recursive:true});
+for(const entry of readdirSync(target))rmSync(resolve(target,entry),{recursive:true,force:true});
+cpSync(source,target,{recursive:true});
+console.log('Static website staged in dist/');
