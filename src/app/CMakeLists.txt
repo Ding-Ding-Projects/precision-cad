@@ -21,8 +21,8 @@ qt_add_qml_module(precision_cad
 )
 
 target_compile_features(precision_cad PRIVATE cxx_std_20)
-target_link_libraries(precision_cad PRIVATE precision_core Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
-target_include_directories(precision_cad PRIVATE ${CMAKE_SOURCE_DIR}/src/core)
+target_link_libraries(precision_cad PRIVATE precision_core precision_cad_preferences Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
+target_include_directories(precision_cad PRIVATE ${CMAKE_SOURCE_DIR}/src/core ${CMAKE_SOURCE_DIR}/src/preferences)
 
 target_compile_definitions(precision_cad PRIVATE
   PRECISION_CAD_VERSION="${PRECISION_CAD_VERSION}"
