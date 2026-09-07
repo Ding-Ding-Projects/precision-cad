@@ -80,3 +80,9 @@ The initial website source is under `website/app/`; its behavior and limitations
 The native application currently has no mounted surface. The document and geometry foundations are being implemented independently. None of the rows above may inherit website evidence as desktop evidence.
 
 The complete regex workbench is not implemented: literal match options do not satisfy it. The current keyboard shortcut only focuses documentation search and is not the required rich palette. The global settings suite, vocabulary loader, converter and local model manager remain absent. These are open requirements, not exemptions or future-release promises.
+
+## Executable checks
+
+`node scripts/check-surface-completeness.mjs --inventory-only` checks the explicit 64-feature, two-surface row structure against an independent required-ID list. `node --test tests/contracts/surface-completeness.test.mjs` deliberately removes each of the 64 rows and verifies rejection, plus duplicate, renamed, malformed and unjustified-completion cases.
+
+The default completion check, `node scripts/check-surface-completeness.mjs`, is intentionally red while any surface row remains incomplete. The evidence verifier for marking a row complete is not implemented yet, so a manually changed `Complete` label is always rejected. Structural validity is not feature completeness.
