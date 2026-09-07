@@ -34,7 +34,7 @@ ApplicationWindow {
   onClosing: (close)=> { if(!allowClose && (workspace.dirty || workspace.busy)) { close.accepted=false; guard("close") } }
   header: ToolBar {
     objectName: "mainToolbar"
-    implicitHeight: toolbarFlow.implicitHeight
+    implicitHeight: toolbarFlow.implicitHeight + topPadding + bottomPadding
     Flow { id: toolbarFlow; objectName: "toolbarFlow"; width: parent.width; padding: 8; spacing: 8
       Label { textFormat: Text.PlainText; text: root.copy("Precision CAD", "精準 CAD"); font.pixelSize: 20; font.bold: true; width: 230 }
       Button { text: root.copy("Box", "方盒"); onClicked: boxDialog.open() }
@@ -115,8 +115,8 @@ ApplicationWindow {
   SplitView { objectName: "workspaceSplit"; anchors.fill: parent
     Pane { objectName: "modelPane"; SplitView.preferredWidth: 310
       Column { objectName: "modelColumn"; anchors.fill: parent; spacing: 8
-        Label { textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
-        ListView { id: tree; width: parent.width; height: parent.height - 170; model: workspace.features; clip: true
+        Label { id: modelHeader; textFormat: Text.PlainText; text: root.copy("Model tree","模型樹"); font.bold: true; font.pixelSize: 18 }
+        ListView { id: tree; width: parent.width; height: Math.max(0, parent.height - modelHeader.implicitHeight - editDimensionsButton.implicitHeight - selectionHelp.implicitHeight - parent.spacing * 3); model: workspace.features; clip: true
           delegate: ItemDelegate { width: tree.width; highlighted: root.selectedLeft === modelData.id || root.selectedRight === modelData.id
             text: (modelData.suppressed ? "⊘ " : "") + modelData.label + "  " + modelData.id.slice(0, 8)
             onClicked: { if(root.selectedLeft === modelData.id) root.selectedLeft = ""; else if(root.selectedRight === modelData.id) root.selectedRight = ""; else if(root.selectedLeft === "") root.selectedLeft = modelData.id; else root.selectedRight = modelData.id; workspace.selectBody(modelData.id) }
@@ -126,8 +126,8 @@ ApplicationWindow {
             }
           }
         }
-        Button { text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: root.selectedLeft !== ""; onClicked: dimensionsDialog.open() }
-        Label { objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
+        Button { id: editDimensionsButton; text: root.copy("Edit selected dimensions","編輯所選尺寸"); enabled: root.selectedLeft !== ""; onClicked: dimensionsDialog.open() }
+        Label { id: selectionHelp; objectName: "selectionHelp"; width: parent.width; textFormat: Text.PlainText; text: root.copy("Pick two tree bodies for boolean operations.","揀兩個實體進行布林運算。"); wrapMode: Text.WordWrap; opacity: preferences.adhdMode ? 1 : .8 }
       }
     }
     Pane { SplitView.fillWidth: true
