@@ -48,7 +48,9 @@ QJsonObject sketchRecord(const QJsonObject &modelJson,const QString &producer,co
         QStringList diagnostics; for(const auto &d:solved.profiles.diagnostics) diagnostics.append(d.message);
         throw std::runtime_error(QString("Sketch profile is not pad-ready: %1").arg(diagnostics.join("; ")).toStdString());
     }
-    QJsonArray loops,regions,segments,conflicts;
+    QJsonArray loops,regions,segments,conflicts,points,radii;
+    for(const auto &p:solved.solve.points) points.append(QJsonObject{{"id",QString::number(p.id)},{"u",p.u},{"v",p.v},{"x",p.x},{"y",p.y},{"z",p.z}});
+    for(const auto &r:solved.solve.radii) radii.append(QJsonObject{{"id",QString::number(r.id)},{"radius",r.radius}});
     for(const auto &l:solved.profiles.loops) {
         QJsonArray entries; for(const auto &s:l.segments) { if(s.kind==ProfileCurveKind::Arc) throw std::runtime_error("Arc profiles are not supported by this pad operation."); entries.append(segmentRecord(s)); segments.append(segmentRecord(s)); }
         loops.append(QJsonObject{{"stableId",l.stableId},{"clockwise",l.clockwise},{"segments",entries}});
@@ -57,7 +59,7 @@ QJsonObject sketchRecord(const QJsonObject &modelJson,const QString &producer,co
     for(auto id:solved.solve.conflictingConstraints) conflicts.append(QString::number(id));
     if(modelOut) *modelOut=model; if(profilesOut) *profilesOut=solved.profiles;
     return {{"kind","sketch"},{"producerFeatureId",producer},{"documentId",request.value("documentId")},{"revision",request.value("revision")},
-        {"model",modelJson},{"solve",QJsonObject{{"status",statusName(solved.solve.status)},{"dof",solved.solve.remainingDof},{"conflicts",conflicts}}},
+        {"model",modelJson},{"solve",QJsonObject{{"status",statusName(solved.solve.status)},{"dof",solved.solve.remainingDof},{"conflicts",conflicts},{"points",points},{"radii",radii}}},
         {"profiles",QJsonObject{{"loops",loops},{"regions",regions}}},{"preview",QJsonObject{{"segments",segments}}}};
 }
 // Match the solver's deterministic datum frame: projected +X, or +Y near parallel.

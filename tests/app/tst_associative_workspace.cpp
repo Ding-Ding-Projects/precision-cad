@@ -12,6 +12,12 @@ class AssociativeWorkspaceTests:public QObject {
  void makePad(WorkspaceController &c) { makeSketch(c); c.addPad(sketchId,regionId,12); QTRY_VERIFY_WITH_TIMEOUT(!c.busy(),15000); QCOMPARE(c.operationState(),QString("Ready")); padId=c.features().last().toMap().value("id").toString(); }
  double volume(const WorkspaceController &c) { return c.volume().section(' ',0,0).toDouble(); }
 private slots:
+ void forgedSketchReplies_data() { QTest::addColumn<double>("width"); for(int mode=81;mode<=89;++mode) QTest::newRow(qPrintable(QString::number(mode)))<<double(mode); }
+ void forgedSketchReplies() {
+   QFETCH(double,width); WorkspaceController c; makePad(c); const auto before=c.meshVertices(),features=c.features(); const auto measurement=c.volume();
+   qputenv("PRECISION_GEOMETRY_WORKER",QByteArrayLiteral(FORGED_SKETCH_WORKER_PATH)); c.updateSketch(sketchId,"xy",width,40,8,40,20);
+   QTRY_VERIFY_WITH_TIMEOUT(!c.busy(),15000); QCOMPARE(c.operationState(),QString("Failed")); QCOMPARE(c.meshVertices(),before); QCOMPARE(c.features(),features); QCOMPARE(c.volume(),measurement); QCOMPARE(c.editableSketch(sketchId).value("width").toDouble(),80.);
+ }
  void productionParserRejectsMalformedJson() {
    QProcess process; process.start(QString::fromUtf8(REAL_SKETCH_WORKER_PATH)); QVERIFY(process.waitForStarted()); process.write("{"); process.closeWriteChannel(); QVERIFY(process.waitForFinished()); QCOMPARE(process.exitCode(),2);
    const auto reply=QJsonDocument::fromJson(process.readAllStandardOutput()).object(); QCOMPARE(reply.value("error").toObject().value("code"),QJsonValue("invalid_json"));

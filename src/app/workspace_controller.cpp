@@ -1,6 +1,7 @@
 #include "workspace_controller.h"
 #include "model_evaluator.h"
 #include "guided_sketch.h"
+#include "sketch_result_validation.h"
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -127,33 +128,7 @@ void WorkspaceController::releaseWorkerLimits() {
 bool WorkspaceController::validResult(const QJsonObject &result) const {
   if(m_candidate && m_index<m_pending.size() && m_pending[m_index].type=="sketch") {
     if(result.size()!=8 || result.value("kind")!=QJsonValue("sketch") || result.value("producerFeatureId")!=QJsonValue(m_pending[m_index].id) || result.value("documentId")!=QJsonValue(m_candidate->record().documentId) || result.value("revision")!=QJsonValue(static_cast<qint64>(m_candidate->record().revision)) || result.value("model")!=m_pending[m_index].parameters.value("model")) return false;
-    const auto solve=result.value("solve").toObject(); const QString status=solve.value("status").toString();
-    const double dof=solve.value("dof").toDouble(-1);
-    if(solve.size()!=3 || (status!="solved" && status!="underConstrained") || !std::isfinite(dof) || dof<0 || dof>8192 || std::floor(dof)!=dof || (status=="solved")!=(dof==0) || !solve.value("conflicts").isArray() || !solve.value("conflicts").toArray().isEmpty()) return false;
-    const auto profiles=result.value("profiles").toObject(), preview=result.value("preview").toObject();
-    const auto loops=profiles.value("loops").toArray(), regions=profiles.value("regions").toArray();
-    if(profiles.size()!=2 || loops.isEmpty() || loops.size()>4096 || regions.isEmpty() || regions.size()>4096 || preview.size()!=1 || !preview.value("segments").isArray()) return false;
-    QSet<QString> loopIds, regionIds, sourceIds; QJsonArray flattened;
-    for(const auto &value:loops) {
-      const auto loop=value.toObject(); const QString id=loop.value("stableId").toString(); const auto segments=loop.value("segments").toArray();
-      if(loop.size()!=3 || id.isEmpty() || id.size()>1024 || loopIds.contains(id) || !loop.value("clockwise").isBool() || segments.isEmpty() || segments.size()>4096) return false;
-      loopIds.insert(id);
-      for(const auto &entry:segments) {
-        const auto segment=entry.toObject(); const QString kind=segment.value("kind").toString(), source=segment.value("sourceEntityId").toString();
-        if(segment.size()!=11 || (kind!="line" && kind!="circle") || source.isEmpty() || sourceIds.contains(source) || !segment.value("startPointId").isString() || !segment.value("endPointId").isString()) return false;
-        sourceIds.insert(source);
-        for(const char *key:{"startU","startV","endU","endV","centerU","centerV","radius"}) { auto n=segment.value(key); if(!n.isDouble() || !std::isfinite(n.toDouble()) || std::abs(n.toDouble())>1e9) return false; }
-        if(kind=="circle" && segment.value("radius").toDouble()<=0) return false;
-        flattened.append(entry);
-      }
-    }
-    for(const auto &value:regions) {
-      const auto region=value.toObject(); const QString id=region.value("stableId").toString(), outer=region.value("outerLoopId").toString();
-      if(region.size()!=3 || id.isEmpty() || id.size()>1024 || regionIds.contains(id) || !loopIds.contains(outer) || !region.value("holeLoopIds").isArray()) return false;
-      regionIds.insert(id); QSet<QString> holes;
-      for(const auto &hole:region.value("holeLoopIds").toArray()) { if(!hole.isString() || !loopIds.contains(hole.toString()) || hole.toString()==outer || holes.contains(hole.toString())) return false; holes.insert(hole.toString()); }
-    }
-    return flattened==preview.value("segments").toArray();
+    return validSketchPayload(result);
   }
   if(result.size()!=5) return false;
   if(result.value("valid")!=QJsonValue(true) || !result.value("brep").isString() || result.value("brep").toString().trimmed().isEmpty()) return false;
