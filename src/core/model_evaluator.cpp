@@ -56,6 +56,17 @@ Result requireUnary(const Feature &feature, std::initializer_list<const char *> 
 
 Result validateFeature(const Feature &feature)
 {
+    if (feature.type == QStringLiteral("sketch")) {
+        const auto model = feature.parameters.value(QStringLiteral("model")).toObject();
+        if (!feature.inputRefs.isEmpty() || feature.parameters.size()!=1 || model.size()!=6 || model.value("schemaVersion")!=QJsonValue(1) || model.value("units")!=QJsonValue("mm") || model.value("id").toString().isEmpty() || !model.value("plane").isObject() || !model.value("entities").isArray() || !model.value("constraints").isArray() || model.value("entities").toArray().isEmpty() || model.value("entities").toArray().size()>4096 || model.value("constraints").toArray().size()>4096)
+            return Result::failure(QStringLiteral("Sketch feature %1 requires one bounded sketch model; detailed validation runs in the isolated worker").arg(feature.id));
+        return Result::success();
+    }
+    if (feature.type == QStringLiteral("pad")) {
+        if (const auto result=requireUnary(feature,{"regionId","length"}); !result.ok) return result;
+        const auto region=feature.parameters.value("regionId");
+        return region.isString() && !region.toString().isEmpty() && region.toString().size()<=1024 && boundedPositive(feature.parameters.value("length")) ? Result::success() : Result::failure(QStringLiteral("Pad requires a stable profile region and positive bounded length"));
+    }
     if (feature.type == QStringLiteral("box")) {
         if (const auto result = requirePrimitive(feature, {"dx", "dy", "dz"}, {"origin"}); !result.ok) return result;
         return !feature.parameters.contains(QStringLiteral("origin")) || vector3(feature.parameters.value(QStringLiteral("origin"))) ? Result::success() : Result::failure(QStringLiteral("Box feature %1 has an invalid origin").arg(feature.id));
@@ -123,6 +134,8 @@ EvaluationResult ModelEvaluator::evaluate(const DocumentRecord &record)
         for (const auto &input : feature.inputRefs) {
             const auto dependency = indexById.constFind(input);
             if (dependency == indexById.cend()) { output.result = Result::failure(QStringLiteral("Unknown feature reference: %1").arg(input)); return output; }
+            const bool inputIsSketch=record.features[*dependency].type==QStringLiteral("sketch");
+            if ((feature.type==QStringLiteral("pad")) != inputIsSketch) { output.result=Result::failure(QStringLiteral("Feature %1 requires %2 input geometry").arg(feature.id,feature.type==QStringLiteral("pad")?QStringLiteral("sketch"):QStringLiteral("solid"))); return output; }
             ++indegrees[index];
             dependents[*dependency].append(index);
         }

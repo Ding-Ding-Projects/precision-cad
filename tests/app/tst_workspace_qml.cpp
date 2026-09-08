@@ -44,6 +44,8 @@ public:
  Q_INVOKABLE void selectBody(const QString &id) { activeBody=id; emit selectedBodyChanged(); emit meshChanged(); }
  Q_INVOKABLE QString localPath(const QUrl &url) const { return url.toLocalFile(); }
  Q_INVOKABLE QVariantMap editableDimensions(const QString &id) const { return dimensions.value(id, {{"editable", false}}); }
+ Q_INVOKABLE QVariantMap editableSketch(const QString &) const { return {{"editable",false}}; }
+ Q_INVOKABLE QVariantMap sketchDetails(const QString &) const { return {{"available",false},{"regions",QVariantList{}},{"preview",QVariantMap{{"segments",QVariantList{}}}}}; }
  Q_INVOKABLE void updateDimensions(const QString &id,double first,double second,double third=0) { ++updateCount; updatedBody=id; updatedDimensions={first,second,third}; dimensions[id]={{"editable",true},{"type","box"},{"first",first},{"second",second},{"third",third}}; }
  Q_INVOKABLE void newDocument() { rows.clear(); dimensions.clear(); selectBody({}); emit documentChanged(); }
  Q_INVOKABLE void addBox(double,double,double) {} Q_INVOKABLE void addCylinder(double,double) {} Q_INVOKABLE void booleanOperation(const QString &,const QString &,const QString &) {} Q_INVOKABLE void suppressFeature(const QString &,bool) {} Q_INVOKABLE void undo() {} Q_INVOKABLE void redo() {} Q_INVOKABLE void cancel() {} Q_INVOKABLE void save(const QString &) {} Q_INVOKABLE void open(const QString &) {}
@@ -57,6 +59,26 @@ signals:
 class WorkspaceQmlTest final : public QObject {
  Q_OBJECT
 private slots:
+#ifdef REAL_SKETCH_WORKER_PATH
+ void associativeControlsUseRealWorker() {
+  qputenv("PRECISION_GEOMETRY_WORKER",QByteArrayLiteral(REAL_SKETCH_WORKER_PATH));
+  QTemporaryDir dir; precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json")); precision::preferences::PersonalVocabularyStore vocab(dir.filePath("vocab.json"));
+  prefs.setLanguageMode("both"); prefs.setFontScale(1.5);
+  WorkspaceController workspace; UiText ui(&prefs,&vocab); QQmlEngine engine;
+  auto context=engine.rootContext(); context->setContextProperty("preferences",&prefs); context->setContextProperty("vocabulary",&vocab); context->setContextProperty("workspace",&workspace); context->setContextProperty("uiText",&ui); context->setContextProperty("buildVersion","test"); context->setContextProperty("buildTime","unavailable");
+  QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(MAIN_QML_PATH))); QVERIFY2(component.isReady(),qPrintable(component.errorString())); std::unique_ptr<QObject> root(component.create()); QVERIFY2(root!=nullptr,qPrintable(component.errorString())); auto window=qobject_cast<QQuickWindow*>(root.get()); QVERIFY(window); window->resize(800,600);
+  auto find=[&](const char *name) { return root->findChild<QObject*>(name); };
+  QVERIFY(find("newSketchButton")); QVERIFY(QMetaObject::invokeMethod(find("newSketchButton"),"clicked"));
+  QVERIFY(find("sketchEditorDialog")->property("visible").toBool());
+  find("sketchWidth")->setProperty("text","80"); find("sketchHeight")->setProperty("text","40"); find("sketchHoleU")->setProperty("text","40");
+  QVERIFY(QMetaObject::invokeMethod(find("saveSketchButton"),"clicked")); QTRY_VERIFY_WITH_TIMEOUT(!workspace.busy(),15000); QCOMPARE(workspace.operationState(),QString("Ready")); QCOMPARE(workspace.features().size(),1);
+  const auto sketch=workspace.selectedBody(); QVERIFY(workspace.sketchDetails(sketch).value("available").toBool());
+  QVERIFY(QMetaObject::invokeMethod(find("newPadButton"),"clicked")); QVERIFY(find("padDialog")->property("visible").toBool()); find("padLength")->setProperty("text","12"); QVERIFY(QMetaObject::invokeMethod(find("createPadButton"),"clicked")); QTRY_VERIFY_WITH_TIMEOUT(!workspace.busy(),15000); QCOMPARE(workspace.operationState(),QString("Ready")); QCOMPARE(workspace.features().size(),2);
+  const auto pad=workspace.selectedBody(); workspace.selectBody(sketch); QVERIFY(QMetaObject::invokeMethod(find("editSketchButton"),"clicked")); QVERIFY(find("sketchSolvedPreview")); find("sketchWidth")->setProperty("text","100"); QVERIFY(QMetaObject::invokeMethod(find("saveSketchButton"),"clicked")); QTRY_VERIFY_WITH_TIMEOUT(!workspace.busy(),15000); QCOMPARE(workspace.operationState(),QString("Ready")); workspace.selectBody(pad); QVERIFY(workspace.volume().startsWith("45587."));
+  workspace.save(dir.filePath("qml.pcad")); QVERIFY(!workspace.dirty());
+  qunsetenv("PRECISION_GEOMETRY_WORKER");
+ }
+#endif
  void nativeCameraBindingPickingAndInput() {
   QTemporaryDir dir; QVERIFY(dir.isValid());
   precision::preferences::PreferencesStore prefs(dir.filePath("prefs.json"));

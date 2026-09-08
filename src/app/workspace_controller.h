@@ -35,6 +35,11 @@ public:
   QString operationState() const { return m_state; } QString errorMessage() const { return m_error; } QString volume() const { return m_volume; } QString bounds() const { return m_bounds; } bool dirty() const { return m_dirty; }
   Q_INVOKABLE void addBox(double dx, double dy, double dz);
   Q_INVOKABLE void addCylinder(double radius, double height);
+  Q_INVOKABLE void addSketch(const QString &plane, double width, double height, double holeRadius, double holeU, double holeV);
+  Q_INVOKABLE void updateSketch(const QString &id, const QString &plane, double width, double height, double holeRadius, double holeU, double holeV);
+  Q_INVOKABLE void addPad(const QString &sketchId, const QString &regionId, double length);
+  Q_INVOKABLE QVariantMap editableSketch(const QString &id) const;
+  Q_INVOKABLE QVariantMap sketchDetails(const QString &id) const;
   Q_INVOKABLE void booleanOperation(const QString &operation, const QString &left, const QString &right);
   Q_INVOKABLE void suppressFeature(const QString &id, bool suppressed);
   Q_INVOKABLE void updateDimensions(const QString &id, double first, double second, double third = 0.0);
