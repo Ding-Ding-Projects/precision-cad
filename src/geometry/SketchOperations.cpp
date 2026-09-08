@@ -65,7 +65,11 @@ QJsonObject sketchRecord(const QJsonObject &modelJson,const QString &producer,co
 // Match the solver's deterministic datum frame: projected +X, or +Y near parallel.
 struct Frame {
     gp_Pnt origin; gp_Dir normal; gp_Vec u,v;
-    explicit Frame(const DatumPlane &p):origin(p.originX,p.originY,p.originZ),normal(p.normalX,p.normalY,p.normalZ) {
+    static gp_Dir normalized(const DatumPlane &p) {
+        const double scale=std::max({std::abs(p.normalX),std::abs(p.normalY),std::abs(p.normalZ)});
+        return gp_Dir(p.normalX/scale,p.normalY/scale,p.normalZ/scale);
+    }
+    explicit Frame(const DatumPlane &p):origin(p.originX,p.originY,p.originZ),normal(normalized(p)) {
         const gp_Vec n(normal), axis=std::abs(normal.X())>0.9?gp_Vec(0,1,0):gp_Vec(1,0,0);
         u=axis-n.Multiplied(axis.Dot(n)); u.Normalize(); v=n.Crossed(u);
     }

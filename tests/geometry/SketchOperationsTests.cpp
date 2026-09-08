@@ -13,6 +13,18 @@ class SketchOperationsTests:public QObject {
  QJsonObject sketch(const QString &plane="xy",double width=80) { return executeSketchRequest(request("sketch",{{"model",rectangleHoleModel("model-1",plane,width,40,8,40,20)},{"producerFeatureId","feature-sketch"}})); }
  QJsonObject pad(const QJsonObject &source,int revision=3) { const auto region=source.value("profiles").toObject().value("regions").toArray().first().toObject().value("stableId"); return executeSketchRequest(request("pad",{{"length",12},{"regionId",region},{"sketchId","feature-sketch"},{"sketch",source}},revision)); }
 private slots:
+ void normalizedDatumNormals_data() {
+   QTest::addColumn<double>("x"); QTest::addColumn<double>("y"); QTest::addColumn<double>("z");
+   QTest::newRow("negative")<<0.<<0.<<-1.; QTest::newRow("oblique")<<1.<<2.<<3.;
+   QTest::newRow("extreme-large")<<1e300<<2e300<<3e300; QTest::newRow("extreme-small")<<1e-300<<2e-300<<3e-300;
+ }
+ void normalizedDatumNormals() {
+   QFETCH(double,x); QFETCH(double,y); QFETCH(double,z); auto model=rectangleHoleModel("model","xy",80,40,8,40,20); auto plane=model.value("plane").toObject(); plane.insert("normalX",x); plane.insert("normalY",y); plane.insert("normalZ",z); model.insert("plane",plane);
+   const auto s=executeSketchRequest(request("sketch",{{"model",model},{"producerFeatureId","feature-sketch"}})); QVERIFY(s.value("ok").toBool());
+   const auto p=pad(s.value("result").toObject()); QVERIFY2(p.value("ok").toBool(),qPrintable(QString::fromUtf8(QJsonDocument(p).toJson())));
+   const auto solid=p.value("result").toObject(); QVERIFY(std::abs(solid.value("volume").toDouble()-(3200-std::acos(-1.)*64)*12)<1e-6);
+   if(x==0 && y==0 && z<0) { const auto b=solid.value("bounds").toArray(); QVERIFY(std::abs(b[2].toDouble()+12)<1e-5); QVERIFY(std::abs(b[5].toDouble())<1e-5); }
+ }
  void volumeAndPlanes_data() { QTest::addColumn<QString>("plane"); for(auto p:{"xy","yz","zx"}) QTest::newRow(p)<<QString(p); }
  void volumeAndPlanes() {
    QFETCH(QString,plane); const auto s=sketch(plane); QVERIFY2(s.value("ok").toBool(),qPrintable(QString::fromUtf8(QJsonDocument(s).toJson())));
