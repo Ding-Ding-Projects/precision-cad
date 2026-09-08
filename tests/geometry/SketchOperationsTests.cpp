@@ -31,7 +31,11 @@ private slots:
    source=sketch().value("result").toObject(); auto preview=source.value("preview").toObject(); preview.insert("segments",QJsonArray{}); source.insert("preview",preview); QVERIFY(!pad(source).value("ok").toBool());
  }
  void invalidProfileAndSolverConflict() {
-   auto model=rectangleHoleModel("model","xy",80,40,20,40,20);
+   auto model=rectangleHoleModel("model","xy",80,40,8,40,20);
+   auto touchingEntities=model.value("entities").toArray(), touchingConstraints=model.value("constraints").toArray();
+   auto circle=touchingEntities[5].toObject(), radiusConstraint=touchingConstraints[8].toObject();
+   circle.insert("radius",20); radiusConstraint.insert("value",20); touchingEntities[5]=circle; touchingConstraints[8]=radiusConstraint;
+   model.insert("entities",touchingEntities); model.insert("constraints",touchingConstraints);
    QVERIFY(!executeSketchRequest(request("sketch",{{"model",model},{"producerFeatureId","feature"}})).value("ok").toBool());
    model=rectangleHoleModel("model","xy",80,40,8,40,20); auto constraints=model.value("constraints").toArray(); auto conflict=constraints[1].toObject(); conflict.insert("id","99"); conflict.insert("value",90); constraints.append(conflict); model.insert("constraints",constraints);
    auto failed=executeSketchRequest(request("sketch",{{"model",model},{"producerFeatureId","feature"}})); QVERIFY(!failed.value("ok").toBool()); QVERIFY(failed.value("error").toObject().value("message").toString().contains("constraint")); QVERIFY(!failed.contains("result"));

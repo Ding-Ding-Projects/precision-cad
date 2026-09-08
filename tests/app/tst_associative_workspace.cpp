@@ -12,6 +12,10 @@ class AssociativeWorkspaceTests:public QObject {
  void makePad(WorkspaceController &c) { makeSketch(c); c.addPad(sketchId,regionId,12); QTRY_VERIFY_WITH_TIMEOUT(!c.busy(),15000); QCOMPARE(c.operationState(),QString("Ready")); padId=c.features().last().toMap().value("id").toString(); }
  double volume(const WorkspaceController &c) { return c.volume().section(' ',0,0).toDouble(); }
 private slots:
+ void productionParserRejectsMalformedJson() {
+   QProcess process; process.start(QString::fromUtf8(REAL_SKETCH_WORKER_PATH)); QVERIFY(process.waitForStarted()); process.write("{"); process.closeWriteChannel(); QVERIFY(process.waitForFinished()); QCOMPARE(process.exitCode(),2);
+   const auto reply=QJsonDocument::fromJson(process.readAllStandardOutput()).object(); QCOMPARE(reply.value("error").toObject().value("code"),QJsonValue("invalid_json"));
+ }
  void init() { qputenv("PRECISION_GEOMETRY_WORKER",QByteArrayLiteral(REAL_SKETCH_WORKER_PATH)); qunsetenv("PRECISION_WORKER_TIMEOUT_MS"); qunsetenv("PRECISION_WORKER_CACHE_BYTES"); }
  void editUndoSaveReopen() {
    QTemporaryDir dir; WorkspaceController c; makePad(c); QVERIFY(std::abs(volume(c)-(3200-std::acos(-1.)*64)*12)<1e-5);

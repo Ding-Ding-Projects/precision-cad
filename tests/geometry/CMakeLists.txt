@@ -13,6 +13,7 @@ target_link_libraries(precision_geometry_tests PRIVATE precision_geometry Qt6::T
 add_test(NAME precision_geometry_tests COMMAND precision_geometry_tests)
 if(TARGET precision_sketch)
   add_executable(precision_sketch_operations_tests SketchOperationsTests.cpp)
-  target_link_libraries(precision_sketch_operations_tests PRIVATE precision_geometry precision_core Qt6::Test)
+  target_link_libraries(precision_sketch_operations_tests PRIVATE precision_geometry Qt6::Test)
+  target_include_directories(precision_sketch_operations_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../src/core")
   add_test(NAME sketch-operations COMMAND precision_sketch_operations_tests)
 endif()

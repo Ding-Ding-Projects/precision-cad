@@ -260,7 +260,7 @@ private slots:
   QVERIFY(toolbar); QVERIFY(flow); QVERIFY(workspaceSplit); QVERIFY(modelColumn); QVERIFY(help); QVERIFY(inspectorScroll); QVERIFY(inspector); QVERIFY(version); QVERIFY(notice);
   QVERIFY(prefs.setLanguageMode("en")); QCoreApplication::processEvents();
   const auto toolbarItems=flow->childItems();
-  const QStringList toolbarActions{"Box","New","Cylinder","Union","Cut","Intersect","Undo","Redo","Fit","Save","Open","Settings"};
+  const QStringList toolbarActions{"Box","Sketch","Pad","New","Cylinder","Union","Cut","Intersect","Undo","Redo","Fit","Save","Open","Settings"};
   QCOMPARE(toolbarItems.size(),toolbarActions.size()+1);
   QVERIFY2(toolbarItems.first()->inherits("QQuickLabel"),"the first toolbar item must remain the title label");
   for (qsizetype index=0;index<toolbarActions.size();++index) {
