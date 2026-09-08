@@ -1,5 +1,21 @@
 # Current implementation state
 
+## 2026-09-08 continuation
+
+The integrated source baseline is `8b092b53fa5854e79107536d8baebe0a8d01231e`. The product is still incomplete and no intermediate installer release is authorized. The only published installer remains `v0.1.0-dev.20260907.1`.
+
+Implemented foundations now include deterministic topological evaluation with suppression propagation and version-one parameter compatibility; multi-body Qt Quick 3D rendering with live picking, Z-up standard views, selection preservation and highlighting; a persistent version/provenance footer; the real pinned SolveSpace adapter; analytic line/circle profile extraction; bounded dimensional expressions; a native HTTPS/Squirrel update backend; protected disposable-environment preflight; an explicit 189-member acceptance registry; and sealed native diagnostic collection.
+
+Verification is commit-specific. The combined native build at `d52e989444a6ac2323cc48ec30ed261da1652993` passed all 13 CTest targets in 239.64 seconds. After diagnostics integration, the application and relevant targets built at `8b092b5`; `native-diagnostics` passed in 2.62 seconds and `workspace-qml` in 2.51 seconds. The acceptance framework passed 4 tests, including removal of each of 189 distinct members; its release mode intentionally remains red while 128 surface cells and real acceptance collectors are incomplete.
+
+Actual hidden-desktop interaction at `f29406b` showed two bodies, direct viewport selection, and a cylinder radius edit from 12 to 10 mm while retaining the selected body and its 45 mm height. Its volume became 14137.1669412 mm3. Those raw captures remain private and were not promoted. A new `8b092b5` front-screen run on 2026-09-08 ended normally with exit code zero and a matching sealed, complete diagnostics receipt with zero Qt/QML warnings, criticals, or fatals. This proves only that inspected run, not installed-runtime or full feature completeness.
+
+The next active slice is first-class editable sketch and dependent pad features through isolated worker version 2. The existing solver, profiles and expressions are not yet wired into a complete modeling workflow. The updater backend is not mounted in the shell, and this host's broad AppData ancestry is refused by its private-staging checks without changing permissions. Hyper-V inventory is authorization-refused; no disposable guest or installed update proof exists.
+
+The unintegrated `feat/geometry-topology-map` branch is preserved at `0048dd67fdfc858044d1c4e18c5fc2648703f4dc`. Its six remaining review defects are recorded in its topology article. Do not substitute that branch for the accepted primary geometry implementation until those repairs pass review. Assemblies, drawings, sheet metal, exchange, CAM, analysis, the complete shared contract and the final release remain unfinished.
+
+The sections below retain earlier development evidence and do not supersede this continuation record.
+
 ## Baseline
 
 Started from an empty workspace on 2026-09-07. The public source repository is `Ding-Ding-Projects/precision-cad`. No pre-existing CAD implementation was imported.

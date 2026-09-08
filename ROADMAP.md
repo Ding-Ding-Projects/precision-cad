@@ -2,6 +2,18 @@
 
 Checked items require implementation and verification. Intermediate builds are not completion of the professional suite.
 
+## Verified implementation foundations
+- [x] Deterministic typed evaluation and transitive suppression with legacy parameter compatibility
+- [x] Real SolveSpace adapter with strict parsing, stable native handles, datum orientation and provenance regressions
+- [x] Analytic line/circle profile regions and holes with scale-aware contact and orientation tests
+- [x] Bounded dimensional-expression parser and named-parameter evaluation
+- [x] Native multi-body rendering and direct selection, with a real radius-edit interaction at `f29406b`
+- [x] Native diagnostic collection with a sealed normal-exit receipt at `8b092b5`
+- [ ] Complete sketch-to-pad UI and associative document workflow (implementation in progress)
+- [ ] Complete topology reference repair and selective feature integration (preserved branch under repair)
+- [ ] Mount and verify the reviewed updater backend in the installed application
+- [ ] Promote fresh native captures and complete the required surface matrix
+
 ## Foundation
 - [x] Publish development prerelease `v0.1.0-dev.20260907.1` with unsigned `Setup.exe`, `RELEASES`, and a full `.nupkg` (installer execution, installed-runtime proof, updater behavior, and full release remain incomplete)
 - [ ] Reproducible Windows bootstrap and native build (final source completed 6/6 focused CTest targets and the canonical local Squirrel package route; fresh-machine acquisition remains incomplete)
