@@ -1,5 +1,15 @@
 # Current implementation state
 
+## 2026-09-08 preservation closeout
+
+The user stopped new implementation and requested preservation and cleanup. Accepted work is integrated through `b8e0aaa428ceed2c86cacbe9ca93d0169f7e2af9`, including the repaired worker topology maps. The topology suite passed 18 QtTest rows, zero failed or skipped, with independent acceptance. Historical producer binding and persistent topology selection in the UI remain separate unfinished work. The website workflow for that source succeeded at run `34289239422`.
+
+Unfinished associative modeling is preserved on `feat/associative-sketch-pad` at `1bb308ac6bc6fb402a458af5c09c2c24d6c6d6dc`. Its implementation source `bff6defc6897c0ace2b2811529209e3a5229458b` completed the native build, but final tests did not run after the preservation request. Earlier source `42cd916` passed numerical sketch operations, six associative-controller cases and 36 existing controller cases; its QML result was nine passed and one failed because the toolbar inventory lacked the two new actions. That assertion and later structural/datum findings are source-repaired, compiled, and awaiting final verification.
+
+The next integration must add `#include "SketchOperations.h"` and route protocol version 2 from `executeRequest()` to `executeSketchRequest(request)` in the production geometry dispatcher. Preserve protocol version 1 and the accepted topology map contract. Then run the numerical, associative-controller, existing controller, QML, and sketch-profile regressions against the exact integrated commit; verify standalone geometry linkage; and drive the real sketch/pad/edit/save/reopen workflow on a hidden desktop. The test-only dispatcher is not production wiring. Retain this branch and linked checkout until those checks and integration are complete.
+
+All completed task branches were inventoried for a fresh verified OneDrive archive and ancestry-proven cleanup. Generated build probes were moved into their owning ignored build directories before archiving. The unfinished associative checkout and historical branches with uncertain ownership are retained. No installer, full release, installed update, complete shared-surface inventory, or complete CAD suite is claimed.
+
 ## 2026-09-08 continuation
 
 The integrated source baseline is `8b092b53fa5854e79107536d8baebe0a8d01231e`. The product is still incomplete and no intermediate installer release is authorized. The only published installer remains `v0.1.0-dev.20260907.1`.
@@ -12,7 +22,7 @@ Actual hidden-desktop interaction at `f29406b` showed two bodies, direct viewpor
 
 The next active slice is first-class editable sketch and dependent pad features through isolated worker version 2. The existing solver, profiles and expressions are not yet wired into a complete modeling workflow. The updater backend is not mounted in the shell, and this host's broad AppData ancestry is refused by its private-staging checks without changing permissions. Hyper-V inventory is authorization-refused; no disposable guest or installed update proof exists.
 
-The unintegrated `feat/geometry-topology-map` branch is preserved at `0048dd67fdfc858044d1c4e18c5fc2648703f4dc`. Its six remaining review defects are recorded in its topology article. Do not substitute that branch for the accepted primary geometry implementation until those repairs pass review. Assemblies, drawings, sheet metal, exchange, CAM, analysis, the complete shared contract and the final release remain unfinished.
+At the start of this continuation, `feat/geometry-topology-map` was preserved at `0048dd67fdfc858044d1c4e18c5fc2648703f4dc` with six review defects. Those worker defects were subsequently repaired and integrated at `b8e0aaa`; see the preservation closeout above. Assemblies, drawings, sheet metal, exchange, CAM, analysis, the complete shared contract and the final release remain unfinished.
 
 The sections below retain earlier development evidence and do not supersede this continuation record.
 

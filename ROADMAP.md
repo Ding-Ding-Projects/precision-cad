@@ -9,8 +9,9 @@ Checked items require implementation and verification. Intermediate builds are n
 - [x] Bounded dimensional-expression parser and named-parameter evaluation
 - [x] Native multi-body rendering and direct selection, with a real radius-edit interaction at `f29406b`
 - [x] Native diagnostic collection with a sealed normal-exit receipt at `8b092b5`
-- [ ] Complete sketch-to-pad UI and associative document workflow (implementation in progress)
-- [ ] Complete topology reference repair and selective feature integration (preserved branch under repair)
+- [x] Worker topology map validation, triangle ownership, cached-map selective fillets and bounded curve serialization
+- [ ] Complete sketch-to-pad UI and associative document workflow (built candidate preserved on `feat/associative-sketch-pad`; production dispatch and final verification pending)
+- [ ] Complete topology reference repair and selective feature integration in the host and UI (worker foundation accepted)
 - [ ] Mount and verify the reviewed updater backend in the installed application
 - [ ] Promote fresh native captures and complete the required surface matrix
 
