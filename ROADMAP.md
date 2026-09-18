@@ -2,6 +2,12 @@
 
 Checked items require implementation and verification. Intermediate builds are not completion of the professional suite.
 
+## 2026-09-18 repository closeout state
+- [x] Fetch `origin` and inventory the primary checkout, all 11 linked checkouts, the index, conflict markers, untracked files and stash namespace
+- [x] Confirm ten feature branches are ancestors of `origin/main` and retain the active associative branch without merging unfinished work
+- [ ] Complete and verify `feat/associative-sketch-pad` production wiring, final regressions, standalone linkage and native workflow evidence
+- [ ] Create and verify the external repository archive before removing any redundant linked checkout or branch
+
 ## Verified implementation foundations
 - [x] Deterministic typed evaluation and transitive suppression with legacy parameter compatibility
 - [x] Real SolveSpace adapter with strict parsing, stable native handles, datum orientation and provenance regressions

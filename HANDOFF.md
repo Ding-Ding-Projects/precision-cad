@@ -1,5 +1,17 @@
 # Current implementation state
 
+## 2026-09-18 preservation and integration inventory
+
+The primary checkout was fetched from `origin` before inspection and is clean at `0c73992b94f7de373ba590cc2b7f918074589322`. The repository has 11 linked checkouts under `C:\Users\cntow\Documents\GitHub\gerk tong hui`, all belonging to this repository. Every linked checkout was inspected and was clean, with no unmerged index entries, no conflict markers, and no untracked non-ignored files. No Git stash exists.
+
+Ten feature branches are already ancestors of `origin/main`: `feat/constrained-sketch-core`, `feat/dimensional-expressions`, `feat/geometry-topology-map`, `feat/native-3d-viewport`, `feat/native-capture-diagnostics`, `feat/native-update-client`, `feat/product-acceptance-contract`, `feat/release-environment`, `feat/sketch-profiles`, and `feat/typed-model-evaluator`. Their linked checkouts are retained until the external archive and ancestry checks complete.
+
+`feat/associative-sketch-pad` remains active and unmerged at `1bb308ac6bc6fb402a458af5c09c2c24d6c6d6dc`. Its five commits are present on the matching `origin/feat/associative-sketch-pad` ref, but the branch is five commits behind `origin/main` and is not an ancestor of `main`. Its own preservation note states that production dispatcher wiring, final regressions, standalone linkage, and native sketch/pad workflow evidence remain pending. It is therefore retained as active unfinished work and is not merged or removed in this closeout.
+
+No conflict resolution was required because all index entries were resolved before this inventory and no conflict markers were present. No preservation commits were needed because every discovered checkout and the stash namespace were already clean. No release, installer, or unrelated issue work was performed. Open issues #1, #3, and #4 remain open because their documented website, cross-surface contract, and associative-workflow completion criteria are outside this preservation-only closeout.
+
+廣東話：主工作區先由 `origin` 更新，再逐個檢查 11 個屬於本 repository 嘅 linked checkout。全部都乾淨，冇未合併 index、冇衝突標記、冇未追蹤非忽略檔案，亦冇 stash。十條 feature branch 已經喺 `main` 入面；associative sketch branch 仍然未完成，保留原位，唔會扮完成而合併或刪除。今次只做保存、整合盤點同安全收尾，唔做 release。
+
 ## 2026-09-08 preservation closeout
 
 The user stopped new implementation and requested preservation and cleanup. Accepted work is integrated through `b8e0aaa428ceed2c86cacbe9ca93d0169f7e2af9`, including the repaired worker topology maps. The topology suite passed 18 QtTest rows, zero failed or skipped, with independent acceptance. Historical producer binding and persistent topology selection in the UI remain separate unfinished work. The website workflow for that source succeeded at run `34289239422`.
