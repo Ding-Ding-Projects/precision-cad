@@ -12,4 +12,4 @@ Containment uses exact line segment tests and analytic circle tests. Segment-cir
 
 After nesting classification, each outer loop is canonical CCW and each hole loop CW. Line loops rotate to their lowest stable source entity ID. Loop, region, and hole output are then stable-ID sorted, so entity storage order does not affect the profile result.
 
-`tests/sketch/profile_tests.cpp` uses actual SolveSpace results for a constrained rectangle with a circular hole, verifies stable source and loop IDs after a dimension edit, and covers dangling, branched, and touching geometry rejection. This is a profile-core Chut only. The geometry lane owns BRep face construction and downstream validation.
+`tests/sketch/profile_tests.cpp` uses actual SolveSpace results for a constrained rectangle with a circular hole, verifies stable source and loop IDs after a dimension edit, and covers dangling, branched, and touching geometry rejection. This is a profile-core gate only. The geometry lane owns BRep face construction and downstream validation.

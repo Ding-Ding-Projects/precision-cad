@@ -48,7 +48,7 @@ The guest route is intentionally receipt-first. It records the setup hash, isola
 
 The updater section remains unverified until the native updater exists and a credential-free deterministic HTTPS feed serves the ordered prior and candidate artifacts. A full future receipt must contain observed `available`, `downloading`, and `ready-to-restart` states, package-hash validation, a release-note link, the unsigned warning, and explicit restart or later actions.
 
-## Process-observation Chut
+## Process-observation gate
 
 The guest does not falsify a successful installation when process observation is incomplete. The known `Win32_ProcessStartTrace` `AccessDenied` condition produces `mode: blocked`, `exhaustive: false`, and a blocked verdict. Sampling with `Get-Process` is explicitly incomplete because short-lived processes may escape it. The receipt validator accepts that as a truthful blocked outcome and rejects it when `-RequireComplete` is specified:
 
@@ -56,7 +56,7 @@ The guest does not falsify a successful installation when process observation is
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-environment/Test-GuestReleaseReceipt.ps1 -ReceiptPath artifacts/release-environment/runtime-receipt.json -RequireComplete
 ```
 
-When the observation Chut is available, the final verification must use the cheap Lowlevel headless route inside the guest: create a named off-screen desktop, launch the installed executable directly, resolve the non-zero application window by exact title and class, drive the updater flow, and retain the guest-only receipt and captures. No visible desktop or host profile is used.
+When the observation gate is available, the final verification must use the cheap Lowlevel headless route inside the guest: create a named off-screen desktop, launch the installed executable directly, resolve the non-zero application window by exact title and class, drive the updater flow, and retain the guest-only receipt and captures. No visible desktop or host profile is used.
 
 ## Focused validation
 
