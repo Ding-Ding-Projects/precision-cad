@@ -8,6 +8,7 @@
 - [Dimensional expressions](dimensional-expressions.md)
 - [Product acceptance membership](product-acceptance.md)
 - [Disposable release environment](disposable-release-environment.md)
+- [Associative sketch and pad](associative-sketch-pad.md)
 - [Project website](website.md)
 - [Build and deployment](build.md)
 - [Native release metadata and provenance](native-release-evidence.md)

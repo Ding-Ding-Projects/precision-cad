@@ -1,4 +1,5 @@
 #include "sketch_profiles.h"
+#include "profile_identity.h"
 
 #include <QHash>
 #include <QSet>
@@ -36,11 +37,6 @@ bool lineCircleTouches(Point a, Point b, Point c, double radius, Tolerance toler
     const double parameterTolerance=tolerance.length/std::max(1.0,std::sqrt(length2));
     const double t1=(-coefficientB-root)/(2.0*length2), t2=(-coefficientB+root)/(2.0*length2);
     return (t1 >= -parameterTolerance && t1 <= 1.0+parameterTolerance) || (t2 >= -parameterTolerance && t2 <= 1.0+parameterTolerance);
-}
-QString stableId(const QVector<SketchEntityId> &ids, QStringView prefix) {
-    QVector<SketchEntityId> sorted=ids; std::sort(sorted.begin(), sorted.end());
-    QStringList parts; for (const auto id: sorted) parts.append(QString::number(id));
-    return QString(prefix) + QLatin1Char(':') + parts.join(QLatin1Char(','));
 }
 void add(SketchProfileResult &out, ProfileDiagnosticKind kind, QString message, QVector<SketchEntityId> ids={}) { out.diagnostics.push_back({kind,std::move(message),std::move(ids)}); }
 bool pointInPolygon(const QVector<Point> &polygon, Point p, Tolerance tolerance) {
@@ -118,7 +114,7 @@ SketchProfileResult extractSolvedProfiles(const SketchModel &model, const Sketch
         if (entity.kind==SketchEntityKind::Circle) {
             const auto c=points.value(entity.centerPointId); const double r=radii.value(entity.id);
             SketchProfileSegment s{ProfileCurveKind::Circle,entity.id,0,0,0,0,0,0,c.x,c.y,r};
-            out.loops.push_back({stableId({entity.id},u"loop"),{s},false}); continue;
+            out.loops.push_back({profileLoopId({entity.id}),{s},false}); continue;
         }
         if (!points.contains(entity.startPointId)||!points.contains(entity.endPointId)) { add(out,ProfileDiagnosticKind::MissingSolvedAssociation,QStringLiteral("Line endpoint lacks a solved association."),{entity.id}); continue; }
         const auto a=points.value(entity.startPointId),b=points.value(entity.endPointId);
@@ -133,7 +129,7 @@ SketchProfileResult extractSolvedProfiles(const SketchModel &model, const Sketch
         QVector<SketchProfileSegment> loop; QVector<SketchEntityId> ids; int current=seed; quint64 at=edges[current].a;
         while(!seen.contains(current)) { seen.insert(current); const auto &edge=edges[current]; const bool forward=edge.a==at; auto s=edge.segment; if(!forward) { std::swap(s.startPointId,s.endPointId); std::swap(s.startU,s.endU); std::swap(s.startV,s.endV); } loop.push_back(s); ids.push_back(s.sourceEntityId); at=forward?edge.b:edge.a; const auto &choices=incident[at]; current=choices[0]==current?choices[1]:choices[0]; }
         if(at!=edges[seed].a) { add(out,ProfileDiagnosticKind::Open,QStringLiteral("Profile edge walk did not return to its starting topological endpoint."),ids); continue; }
-        SketchProfileLoop candidate{stableId(ids,u"loop"),loop,false}; const double twiceArea=signedArea(candidate);
+        SketchProfileLoop candidate{profileLoopId(ids),loop,false}; const double twiceArea=signedArea(candidate);
         if(std::abs(twiceArea)<=areaTolerance(candidate,tolerance)) { add(out,ProfileDiagnosticKind::SelfIntersecting,QStringLiteral("A profile loop has zero signed area."),ids); continue; }
         candidate.clockwise=twiceArea<0; out.loops.push_back(std::move(candidate));
     }
@@ -153,7 +149,7 @@ SketchProfileResult extractSolvedProfiles(const SketchModel &model, const Sketch
     if(!out.diagnostics.isEmpty()) { out.loops.clear(); return out; }
     QVector<int> depth(out.loops.size());
     for(int i=0;i<out.loops.size();++i) { const Point p=interiorPoint(out.loops[i],tolerance); for(int j=0;j<out.loops.size();++j) if(i!=j && contains(out.loops[j],p,tolerance)) ++depth[i]; }
-    for(int i=0;i<out.loops.size();++i) if(depth[i]%2==0) out.regions.push_back({QStringLiteral("region:")+out.loops[i].stableId,out.loops[i].stableId,{}});
+    for(int i=0;i<out.loops.size();++i) if(depth[i]%2==0) out.regions.push_back({profileRegionId(out.loops[i].stableId),out.loops[i].stableId,{}});
     for(int i=0;i<out.loops.size();++i) if(depth[i]%2==1) { int container=-1; for(int j=0;j<out.loops.size();++j) if(depth[j]==depth[i]-1 && contains(out.loops[j],interiorPoint(out.loops[i],tolerance),tolerance)) { if(container>=0) { add(out,ProfileDiagnosticKind::AmbiguousNesting,QStringLiteral("A hole has multiple immediate containing loops.")); break; } container=j; } if(container<0) add(out,ProfileDiagnosticKind::AmbiguousNesting,QStringLiteral("A hole has no immediate containing loop.")); else for(auto &region:out.regions) if(region.outerLoopId==out.loops[container].stableId) region.holeLoopIds.push_back(out.loops[i].stableId); }
     for(int i=0;i<out.loops.size();++i) canonicalize(out.loops[i],depth[i]%2==1);
     std::sort(out.loops.begin(),out.loops.end(),[](const auto &left,const auto &right) { return left.stableId<right.stableId; });
