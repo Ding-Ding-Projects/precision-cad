@@ -32,7 +32,7 @@ Source is intended for distribution under GPL-3.0-or-later. Third-party componen
 - [Issue tracker](https://github.com/Ding-Ding-Projects/precision-cad/issues)
 - [Website build details](docs/engineering/build.md)
 
-The current build produces the website only. No native CAD executable or installer exists yet.
+The website build and a development native executable now exist. Use `build-desktop.bat` for the native build on the documented toolchain; `build.bat` currently builds the website. Fresh-machine native bootstrap, installer packaging, and the complete feature contract remain unfinished. See the current handoff before treating any development build as verified.
 
 ## Website evidence
 

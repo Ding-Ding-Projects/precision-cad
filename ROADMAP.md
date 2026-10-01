@@ -3,6 +3,7 @@
 Checked items require implementation and verification. Intermediate builds are not completion of the professional suite.
 
 ## Foundation
+Current status: native modules and development executable exist, but complete acceptance is pending. The latest QML verification process times out after its assertions pass. The preservation candidate and exact limitations are recorded in HANDOFF.md.
 - [ ] Reproducible Windows bootstrap and native build
 - [ ] Versioned document model, transactions, undo and redo
 - [ ] Atomic save, exclusive writer protection and crash recovery
