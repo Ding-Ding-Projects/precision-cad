@@ -8,14 +8,14 @@ Every complete row must link its implementation, localized copy, persistence or 
 
 | ID | Required capability | Desktop | Website |
 | --- | --- | --- | --- |
-| CORE-001 | Running version and recorded build/release local time | Missing | Partial |
+| CORE-001 | Running version and recorded build/release local time | Partial | Partial |
 | CORE-002 | Hand-written per-surface completeness inventory | Partial | Partial |
 | CORE-003 | Status Hub registration and native status surface | Missing | Missing |
 | CORE-004 | Shared-link preview graphic and served metadata | Missing | Partial |
-| I18N-001 | English, Cantonese and bilingual modes | Missing | Partial |
-| I18N-002 | Independent English and Cantonese tone-level controls | Missing | Missing |
-| I18N-003 | Dialog/message emoji preference | Missing | Missing |
-| I18N-004 | Local private-vocabulary JSON upload, validation, replace and clear | Missing | Missing |
+| I18N-001 | English, Cantonese and bilingual modes | Partial | Partial |
+| I18N-002 | Independent English and Cantonese tone-level controls | Partial | Missing |
+| I18N-003 | Dialog/message emoji preference | Partial | Missing |
+| I18N-004 | Local private-vocabulary JSON upload, validation, replace and clear | Partial | Missing |
 | I18N-005 | Shared renamable School mode and live protected unlock | Missing | Missing |
 | NARR-001 | Optional event narration and serialized queue | Missing | Missing |
 | NARR-002 | Per-language installed voices, rate, pitch, fallback and persistence | Missing | Missing |
@@ -23,18 +23,18 @@ Every complete row must link its implementation, localized copy, persistence or 
 | SCHED-002 | Validated external settings and Home Assistant integration | Missing | Missing |
 | DELIGHT-001 | Non-blocking dim-sum startup surprise | Missing | Missing |
 | DELIGHT-002 | Release code names and verified public image catalog | Missing | Missing |
-| UI-001 | Registered Material Design 3 primitives and complete conformance | Missing | Partial |
-| UI-002 | Accessibility, focus, contrast, reduced motion and responsive sizing | Missing | Partial |
-| UI-003 | Functional controls, truthful empty states and disclosed examples | Missing | Partial |
-| UI-004 | Guided forms, enumerations, defaults, validation and browse controls | Missing | Missing |
-| UI-005 | Rich controls for editable values | Missing | Partial |
-| UI-006 | Settings explanations and default provenance | Missing | Partial |
+| UI-001 | Registered Material Design 3 primitives and complete conformance | Partial | Partial |
+| UI-002 | Accessibility, focus, contrast, reduced motion and responsive sizing | Partial | Partial |
+| UI-003 | Functional controls, truthful empty states and disclosed examples | Partial | Partial |
+| UI-004 | Guided forms, enumerations, defaults, validation and browse controls | Partial | Missing |
+| UI-005 | Rich controls for editable values | Partial | Partial |
+| UI-006 | Settings explanations and default provenance | Partial | Partial |
 | SEARCH-001 | Full regex construction, explanation, testing, profiling and debugging | Missing | Missing |
 | SEARCH-002 | Field-owned search and adjacent isolated regex workbench everywhere | Missing | Partial |
-| FOCUS-001 | Persistent ADHD presentation modes | Missing | Missing |
-| NOTICE-001 | Actionable notifications, progress and notification history | Missing | Partial |
+| FOCUS-001 | Persistent ADHD presentation modes | Partial | Missing |
+| NOTICE-001 | Actionable notifications, progress and notification history | Partial | Partial |
 | SAFETY-001 | Dual-key and slider destructive confirmation with emergency exit | Missing | Missing |
-| APPEAR-001 | Complete global appearance editor and reset | Missing | Partial |
+| APPEAR-001 | Complete global appearance editor and reset | Partial | Partial |
 | APPEAR-002 | Per-element appearance editor, undo, import/export and persistence | Missing | Missing |
 | BRAND-001 | Logo presets, local image processing, crop/fit/background and sizes | Missing | Missing |
 | CONVERT-001 | Categorized offline file converter and bounded persistent queue | Missing | Missing |
@@ -58,7 +58,7 @@ Every complete row must link its implementation, localized copy, persistence or 
 | PALETTE-001 | Ctrl+Shift+F rich command palette and exact destination focus | Missing | Partial |
 | OVERLAY-001 | Opaque bounded scrollable overlays and resizable panels | Missing | Partial |
 | MENU-001 | Context-menu shortcuts derived from live bindings | Missing | Missing |
-| PROGRESS-001 | Origin-local progress, cancellation and duplicate-run protection | Missing | Missing |
+| PROGRESS-001 | Origin-local progress, cancellation and duplicate-run protection | Partial | Missing |
 | EXTDL-001 | Browser-extension Start Download surface | Missing | Missing |
 | EXTDL-002 | Separate Downloading surface with transfer controls and errors | Missing | Missing |
 | EXTDL-003 | Always-on-top completion surface and three-state evidence | Missing | Missing |
@@ -66,8 +66,8 @@ Every complete row must link its implementation, localized copy, persistence or 
 | CONTENT-001 | Isolated rendering of provider-authored markup | Missing | Missing |
 | PUBLISH-001 | Multi-account forge publication and owner selection | Missing | Missing |
 | FILTER-001 | Collapsible filters/statistics with active-state disclosure | Missing | Partial |
-| RELEASE-001 | Original logo and packaged application icon | Missing | Partial |
-| RELEASE-002 | Unsigned Squirrel.Windows installer and explicit-restart updates | Missing | Missing |
+| RELEASE-001 | Original logo and packaged application icon | Partial | Partial |
+| RELEASE-002 | Unsigned Squirrel.Windows installer and explicit-restart updates | Partial | Missing |
 | RELEASE-003 | Release timing, line counts, effort estimates and catalog photo | Missing | Missing |
 | CAPTURE-001 | Real built-surface capture inventory and interaction evidence | Missing | Partial |
 | CAPTURE-002 | Real built-surface screen recording | Missing | Missing |
@@ -77,7 +77,21 @@ Every complete row must link its implementation, localized copy, persistence or 
 
 The initial website source is under `website/app/`; its behavior and limitations are documented in [website.md](website.md). Seven local runtime states were exercised at `463040400b37c98e09ec4e89269699f9bc307fd8`, with selected genuine captures in `docs/evidence/`. This proves only those observed states.
 
-The native application currently has no mounted surface. The document and geometry foundations are being implemented independently. None of the rows above may inherit website evidence as desktop evidence.
+The native application has a mounted Qt Quick foundation, but its partial rows are not a complete desktop contract and none may inherit website evidence. The document and geometry foundations are being implemented independently; the local-history backend remains unmounted and `HISTORY-001` is therefore Missing.
+
+## Native partial-evidence anchors
+
+The following anchors justify only the listed `Partial` desktop cells. Each row
+names separate implementation, focused-test, and engineering-documentation
+evidence. Raw native screenshots remain private and unpromoted; issue [#4](https://github.com/Ding-Ding-Projects/precision-cad/issues/4) owns the per-pass runtime ledger.
+
+| Desktop cells | Implementation | Focused test | Documentation | Boundary |
+| --- | --- | --- | --- | --- |
+| `CORE-001` | [`src/app/main.cpp`](../../src/app/main.cpp) | [`tests/native/test-native-release-metadata.ps1`](../../tests/native/test-native-release-metadata.ps1) | [native release evidence](native-release-evidence.md) | Version metadata exists; installed runtime and release-time proof do not. |
+| I18N-001 to I18N-004, FOCUS-001, APPEAR-001 | [`src/preferences/preferences_store.cpp`](../../src/preferences/preferences_store.cpp), [`src/preferences/personal_vocabulary_store.cpp`](../../src/preferences/personal_vocabulary_store.cpp) | [`tests/preferences/preferences_store_tests.cpp`](../../tests/preferences/preferences_store_tests.cpp) | [native preferences](native-preferences.md) | Backend state and persistence exist; a mounted settings surface and built interaction evidence do not. |
+| UI-001 to UI-006 | [`src/app/Main.qml`](../../src/app/Main.qml) | [`tests/app/tst_workspace_qml.cpp`](../../tests/app/tst_workspace_qml.cpp) | [native workspace](native-workspace.md) | The mounted foundation is exercised in QML; complete Material Design 3, accessibility, and capture evidence remain open. |
+| NOTICE-001, PROGRESS-001 | [`src/app/workspace_controller.cpp`](../../src/app/workspace_controller.cpp) | [`tests/app/tst_workspace_controller.cpp`](../../tests/app/tst_workspace_controller.cpp) | [native workspace](native-workspace.md) | Workspace state has focused coverage; notification history and all required cancellation flows remain open. |
+| RELEASE-001, RELEASE-002 | [`scripts/build-native-installer.ps1`](../../scripts/build-native-installer.ps1), [`assets/precision-cad.ico`](../../assets/precision-cad.ico) | [`tests/native/test-native-release-metadata.ps1`](../../tests/native/test-native-release-metadata.ps1), [`tests/native/test-signer-audit.ps1`](../../tests/native/test-signer-audit.ps1) | [native build](native-build.md), [native release evidence](native-release-evidence.md) | Icon and unsigned Squirrel construction are covered; installation, updater, and published full-release proof remain open. |
 
 The complete regex workbench is not implemented: literal match options do not satisfy it. The current keyboard shortcut only focuses documentation search and is not the required rich palette. The global settings suite, vocabulary loader, converter and local model manager remain absent. These are open requirements, not exemptions or future-release promises.
 

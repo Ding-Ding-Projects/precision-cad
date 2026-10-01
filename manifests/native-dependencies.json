@@ -3,7 +3,7 @@
   "target": "windows-x64",
   "compiler": { "family": "msvc", "toolset": "14.44", "sdk": "10.0.26100.0" },
   "cmake": { "minimum": "3.29.0" },
-  "qt": { "version": "6.8.3", "architecture": "msvc2022_64", "modules": ["Core", "Gui", "Qml", "Quick", "QuickControls2", "OpenGL"] },
+  "qt": { "version": "6.8.3", "architecture": "msvc2022_64", "modules": ["Core", "Gui", "Qml", "Quick", "QuickControls2", "Quick3D", "ShaderTools", "OpenGL"] },
   "occt": {
     "version": "8.0.1",
     "archiveUrl": "https://github.com/Open-Cascade-SAS/OCCT/releases/download/V8.0.1/opencascade-release-no-pch.zip",
@@ -20,5 +20,18 @@
     "innerArchive": "3rdparty-vc14-64.zip",
     "root": "3rdparty-vc14-64"
   },
-  "futureAdapters": { "sketchSolver": "SolveSpace 3.2, integration pending", "mesher": "Gmsh, acquisition and integration pending", "analysisSolver": "CalculiX, acquisition and integration pending" }
+  "squirrel": {
+    "version": "1.9.1",
+    "archiveUrl": "https://www.nuget.org/api/v2/package/Squirrel.Windows/1.9.1",
+    "sha256": "a79f77c5927caacf24890222381b8df094a621cd997328f573f53cb17f5654df",
+    "archiveName": "Squirrel.Windows.1.9.1.nupkg",
+    "toolPath": "tools/Squirrel.com"
+  },
+  "nuget": {
+    "version": "6.12.2",
+    "url": "https://dist.nuget.org/win-x86-commandline/v6.12.2/nuget.exe",
+    "sha256": "64f467376f2ee364ba389461df4a29a8f8dd9aa38120d29046e70b9c82045d97"
+  },
+  "sketchSolver": {"version": "3.2", "gitUrl": "https://github.com/solvespace/solvespace.git", "commit": "27b6a080c8b669421bd4d444650c3b8eddec5687", "headerSha256": "b342bfeab4bd64b747ef3722f3218b64927939eaabfc34afed53819bd248552e", "submodules": ["extlib/eigen", "extlib/mimalloc"]},
+  "futureAdapters": { "mesher": "Gmsh, acquisition and integration pending", "analysisSolver": "CalculiX, acquisition and integration pending" }
 }

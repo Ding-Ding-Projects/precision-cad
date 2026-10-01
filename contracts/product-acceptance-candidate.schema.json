@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://precision-cad.example/contracts/product-acceptance-candidate.schema.json",
+  "title": "Fixture-consistency evidence, not release proof",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sourceCommit", "sourceTreeSha256", "interactions"],
+  "properties": {
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceTreeSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "interactions": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["capabilityId", "fixtureId", "action", "expectedOutcome", "language", "theme", "viewport", "scale", "screen", "state", "previousRevision", "resultRevision", "interactionLogPath", "interactionLogSha256", "capturePath", "captureSha256"], "properties": { "capabilityId": {"type":"string"}, "fixtureId": {"type":"string"}, "action": {"type":"string"}, "expectedOutcome": {"type":"string"}, "language": {"enum":["en","yue","bilingual"]}, "theme": {"enum":["light","dark"]}, "viewport": {"type":"string"}, "scale": {"type":"string"}, "screen": {"type":"string"}, "state": {"type":"string"}, "previousRevision": {"type":"integer"}, "resultRevision": {"type":"integer"}, "interactionLogPath": {"type":"string"}, "interactionLogSha256": {"type":"string","pattern":"^[0-9a-f]{64}$"}, "capturePath": {"type":"string"}, "captureSha256": {"type":"string","pattern":"^[0-9a-f]{64}$"} } } }
+  }
+}

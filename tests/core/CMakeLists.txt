@@ -1,3 +1,7 @@
 add_executable(precision_core_tests precision_document_tests.cpp)
 target_link_libraries(precision_core_tests PRIVATE precision_core Qt6::Core)
 add_test(NAME precision_core_tests COMMAND precision_core_tests)
+
+add_executable(dimensional_expression_tests dimensional_expression_tests.cpp)
+target_link_libraries(dimensional_expression_tests PRIVATE precision_core Qt6::Core)
+add_test(NAME dimensional_expression_tests COMMAND dimensional_expression_tests)
